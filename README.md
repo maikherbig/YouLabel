@@ -14,5 +14,5 @@ YouLabel comes as a standalone executable contained in a zip file. You basically
 * Go to https://github.com/maikherbig/YouLabel/releases
 * Download a zip-file (this file contains the **_standalone executable_**)   
 * Unzip it  
-* Go into the unzipped folder and scroll down until you find an executable (full name is for example "YouLabel_0.0.1.exe")  
+* Go into the unzipped folder and scroll down until you find an executable (full name is for example "YouLabel_0.1.0.exe")  
 * DoubleClick this .exe to run it (no further installation is required)  
