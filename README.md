@@ -10,7 +10,7 @@ Colored rectangles in the image indicate the workflow
 4. (Green rectangle) list shows the labelling decisions. By default, all events are labelled “True”.  
  
 # Installation
-YouLabel comes as a standalone executable contained in a zip file. You basically just need to download the .zip and unzip. The followin 5 steps explain how this is done:    
+YouLabel comes as a standalone executable contained in a zip file. You basically just need to download the .zip and unzip. The following 5 steps explain how this is done:    
 * Go to https://github.com/maikherbig/YouLabel/releases
 * Download a zip-file (this file contains the **_standalone executable_**)   
 * Unzip it  
