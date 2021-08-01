@@ -10,9 +10,11 @@ import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtWidgets, QtGui
 import os, sys
 import numpy as np
+rand_state = np.random.RandomState(13) #to get the same random number on diff. PCs
 import dclab
-from scipy import ndimage
 import traceback
+import cv2
+import h5py,shutil,time
 
 try:
     _fromUtf8 = QtCore.QString.fromUtf8
@@ -28,7 +30,7 @@ except AttributeError:
     def _translate(context, text, disambig):
         return QtWidgets.QApplication.translate(context, text, disambig)
 
-VERSION = "0.1.0" #Python 3.5.6 Version
+VERSION = "0.2.0" #Python 3.7.10 Version
 print("YouLabel Version: "+VERSION)
 
 if sys.platform=="darwin":
@@ -36,6 +38,7 @@ if sys.platform=="darwin":
 else:
     icon_suff = ".ico"
 
+dir_root = os.getcwd()
 
 def MyExceptionHook(etype, value, trace):
     """
@@ -57,169 +60,380 @@ def MyExceptionHook(etype, value, trace):
     msg.exec_()
     return
 
+def store_trace(h5group, data, compression):
+    firstkey = sorted(list(data.keys()))[0]
+    if len(data[firstkey].shape) == 1:
+        # single event
+        for dd in data:
+            data[dd] = data[dd].reshape(1, -1)
+    # create trace group
+    grp = h5group.require_group("trace")
 
-def write_rtdc(fname,rtdc_datasets,Indices):
+    for flt in data:
+        # create traces datasets
+        if flt not in grp:
+            maxshape = (None, data[flt].shape[1])
+            #chunks = (CHUNK_SIZE, data[flt].shape[1])
+            grp.create_dataset(flt,
+                               data=data[flt],
+                               maxshape=maxshape,
+                               fletcher32=True,
+                               chunks = True,
+                               compression=compression)
+        else:
+            dset = grp[flt]
+            oldsize = dset.shape[0]
+            dset.resize(oldsize + data[flt].shape[0], axis=0)
+            dset[oldsize:] = data[flt]
+
+
+def write_rtdc(fname,rtdc_path,indices,decisions):
     """
     fname - path+filename of file to be created
-    rtdc_datasets - list paths to rtdc data-data-sets
-    X_valid - list containing numpy arrays. Each array contains cropped images of individual measurements corresponding to each rtdc_ds
-    Indices - list containing numpy arrays. Each array contais index values which refer to the index of the cell in the original rtdc_ds
+    rtdc_path - string; path to rtdc data-sets
+    X_valid - numpy array containing images of individual cells
+    Indices - numpy array with index values which refer to the index of the cell in the original rtdc_ds
     """
     #Check if a file with name fname already exists:
     if os.path.isfile(fname):
+        print("Following file already exists and will be overwritten: "+fname)
         os.remove(fname) #delete it
-
-    index_new = np.array(range(1,np.sum(np.array([len(I) for I in Indices]))+1)) #New index. Will replace the existing index in order to support viewing imges in shapeout
     
-    Features,Trace_lengths,Mask_dims_x,Mask_dims_y = [],[],[],[]
-    for i in range(len(rtdc_datasets)):
-        try:
-            rtdc_ds = dclab.rtdc_dataset.RTDC_HDF5(rtdc_datasets[i])
-        except:
-            rtdc_ds = dclab.rtdc_dataset.RTDC_HDF5(rtdc_datasets[i])
-        features = rtdc_ds._events.keys()#all features
-        Features.append(features)
+    #copy the template file Empty.rtdc
+    shutil.copy(os.path.join(dir_root,"Empty.rtdc"),fname)
 
-        #The lengths of the fluorescence traces have to be equal, otherwise those traces also have to be dropped
-        if "trace" in features:
-            trace_lengths = [(rtdc_ds["trace"][tr][0]).size for tr in rtdc_ds["trace"].keys()]
-            Trace_lengths.append(trace_lengths)
-        if "mask" in features:
-            mask_dim = (rtdc_ds["mask"][0]).shape
-            Mask_dims_x.append(mask_dim[0])
-            Mask_dims_y.append(mask_dim[1])
- 
-    #Find common features in all .rtdc sets:
-    def commonElements(arr): 
-        # initialize result with first array as a set 
-        result = set(arr[0]) 
-        for currSet in arr[1:]: 
-            result.intersection_update(currSet) 
-        return list(result)     
-    features = commonElements(Features)
+    #load original .rtdc (hdf5) file
+    h5_orig = h5py.File(rtdc_path, 'r')
 
-    if "trace" in features:
-        Trace_lengths = np.concatenate(Trace_lengths)
-        trace_lengths = np.unique(np.array(Trace_lengths))            
-        if len(trace_lengths)>1:
-            ind = np.where(np.array(features)!="trace")[0]
-            features = list(np.array(features)[ind])
-            print("Dropped traces becasue of unequal lenghts")
+    #load each feature contained in the .rtdc file, filter it, and append
+    keys = ["label"] + list(h5_orig["events"].keys())
 
-    if "mask" in features:
-        mask_dim_x = np.unique(np.array(Mask_dims_x))            
-        if len(mask_dim_x)>1:
-            ind = np.where(np.array(features)!="mask")[0]
-            features = list(np.array(features)[ind])
-            print("Dropped mask becasue of unequal image sizes")
+    #Find pixel size of original file:
+    pixel_size = h5_orig.attrs["imaging:pixel size"]
 
-    if "mask" in features:
-        mask_dim_y = np.unique(np.array(Mask_dims_y))            
-        if len(mask_dim_y)>1:
-            ind = np.where(np.array(features)!="mask")[0]
-            features = list(np.array(features)[ind])
-            print("Dropped mask becasue of unequal image sizes")
+    #Open target hdf5 file
+    h5_targ = h5py.File(fname,'a')
+
+    # Write data
+    for key in keys:
+
+        if key == "index":
+            values = np.array(range(len(indices)))+1
+            h5_targ.create_dataset("events/"+key, data=values,dtype=values.dtype)
+
+        elif key == "index_orig":
+            values = h5_orig["events"]["index"][indices]
+            h5_targ.create_dataset("events/"+key, data=values,dtype=values.dtype)
+
+        elif key == "label":
+            h5_targ.create_dataset("events/"+key, data=decisions,dtype=decisions.dtype)
+
+        elif key == "mask":
+            mask = h5_orig["events"]["mask"][indices]
+            mask = np.asarray(mask, dtype=np.uint8)
+            if mask.max() != 255 and mask.max() != 0 and mask.min() == 0:
+                mask = mask / mask.max() * 255
+            maxshape = (None, mask.shape[1], mask.shape[2])
+            dset = h5_targ.create_dataset("events/"+key, data=mask, dtype=np.uint8,maxshape=maxshape,fletcher32=True,chunks=True)
+            dset.attrs.create('CLASS', np.string_('IMAGE'))
+            dset.attrs.create('IMAGE_VERSION', np.string_('1.2'))
+            dset.attrs.create('IMAGE_SUBCLASS', np.string_('IMAGE_GRAYSCALE'))
+
+        elif "image" in key:
+            images = h5_orig["events"][key][indices]
+            maxshape = (None, images.shape[1], images.shape[2])
+            dset = h5_targ.create_dataset("events/"+key, data=images, dtype=np.uint8,maxshape=maxshape,fletcher32=True,chunks=True)
+            dset.attrs.create('CLASS', np.string_('IMAGE'))
+            dset.attrs.create('IMAGE_VERSION', np.string_('1.2'))
+            dset.attrs.create('IMAGE_SUBCLASS', np.string_('IMAGE_GRAYSCALE'))
         
-    for i in range(len(rtdc_datasets)):
-        try:
-            rtdc_ds = dclab.rtdc_dataset.RTDC_HDF5(rtdc_datasets[i])
-        except:
-            rtdc_ds = dclab.rtdc_dataset.RTDC_HDF5(rtdc_datasets[i])
+        elif key == "contour":
+            print("Omitting")
+            # contours = h5_orig["events"][key]
+            # contours = [contours[i][:] for i in contours.keys()]
+            # contours = list(np.array(contours)[ind])
+            # for ii, cc in enumerate(contours):
+            #     h5_targ.create_dataset("events/contour/"+"{}".format(ii),
+            #     data=cc.reshape(cc.shape[0],cc.shape[1]),
+            #     fletcher32=True)
+        
+        elif key == "trace":
+            # create events group
+            events = h5_targ.require_group("events")
+            store_trace(h5group=events,
+                        data=h5_orig["events"]["trace"][indices],
+                        compression="gzip")
 
-        indices = Indices[i]
-        index_new_ = index_new[0:len(indices)]
-        index_new = np.delete(index_new,range(len(indices)))
-        #get metadata of the dataset
-        meta = {}
-        # only export configuration meta data (no user-defined config)
-        for sec in dclab.definitions.CFG_METADATA:
-            if sec in ["fmt_tdms"]:
-                # ignored sections
-                continue
-            if sec in rtdc_ds.config:
-                meta[sec] = rtdc_ds.config[sec].copy()
+        else:
+            values = h5_orig["events"][key][indices]
+            h5_targ.create_dataset("events/"+key, data=values,dtype=values.dtype)
+    
+    #Adjust metadata:
+    #"experiment:event count" = Nr. of images
+    h5_targ.attrs["experiment:event count"] = len(indices)
+    h5_targ.attrs["experiment:sample"] = rtdc_path
+    h5_targ.attrs["experiment:date"] = time.strftime("%Y-%m-%d")
+    h5_targ.attrs["experiment:time"] = time.strftime("%H:%M:%S")
+    h5_targ.attrs["imaging:pixel size"] = pixel_size
+    h5_targ.attrs["setup:identifier"] = h5_orig.attrs["setup:identifier"]
+    h5_targ.attrs["experiment:original_file"] = rtdc_path
+
+
+    h5_targ.close()
+    h5_orig.close()
+
+def image_adjust_channels(images,channels_targ=1):
+    """
+    Check the number of channels of images.
+    Transform images (if needed) to get to the desired number of channels
+    
+    Parameters
+    ----------
+    images: numpy array of dimension (nr.images,height,width) for grayscale,
+    or of dimension (nr.images,height,width,channels) for RGB images
+
+    channels_targ: int
+        target number of channels
+        can be one of the following:
+        
+        - 1: target is a grayscale image. In case RGB images are 
+        provided, the luminosity formula is used to convert of RGB to 
+        grayscale
+        - 3: target is an RGB image. In case grayscale images are provided,
+        the information of each image is copied to all three channels to 
+        convert grayscale to RGB"
+    
+    Returns
+    ----------
+    images: numpy array
+        images with adjusted number of channels
+    """
+
+    #images.shape is (N,H,W) for grayscale, or (N,H,W,C) for RGB images
+    #(N,H,W,C) means (nr.images,height,width,channels)
+
+    #Make sure either (N,H,W), or (N,H,W,C) is provided
+    assert len(images.shape)==4 or len(images.shape)==3, "Shape of 'images' \
+    is not supported: " +str(images.shape) 
+
+    if len(images.shape)==4:#Provided images are RGB
+        #Mare sure there are 1, 2, or 3 channels (RGB)
+        assert images.shape[-1] in [1,2,3], "Images have "+str(images.shape[-1])+" channels. This is (currently) not supported!"
+
+        if channels_targ==1:#User wants Grayscale -> use the luminosity formula
+            images = (0.21 * images[:,:,:,:1]) + (0.72 * images[:,:,:,1:2]) + (0.07 * images[:,:,:,-1:])
+            images = images[:,:,:,0] 
+            images = images.astype(np.uint8)           
+            print("Used luminosity formula to convert RGB to Grayscale")
+            
+    if len(images.shape)==3:#Provided images are Grayscale
+        if channels_targ==3:#User wants RGB -> copy the information to all 3 channels
+            images = np.stack((images,)*3, axis=-1)
+            print("Copied information to all three channels to convert Grayscale to RGB")
+    return images
+
+def vstripes_removal(image):
+    """
+    Backgound in IACS shows vertical stripes
+    Get this pattern using top and bottom 5 pixels
+    and remove that from original image
+    """
+    ##Background finding & removal
+    if len(image.shape)==2:
+        channels=1
+    elif len(image.shape)==3:
+        height, width, channels = image.shape
+
+    if channels==1:
+        #get a slice of 88x5pix at top and bottom of image
+        #and put both stripes in one array
+        bg = np.r_[image[0:5,:],image[-5:,:]]
+        #vertical mean
+        bg = cv2.reduce(bg, 0, cv2.REDUCE_AVG)
+        #stack to get it back to 100x88 pixel image
+        bg = np.tile(bg,(100,1))
+        #remove the background and return
+        image = cv2.subtract(image,bg)
+
+    else:
+        for ch in range(channels):
+            #get a slice of 88x5pix at top and bottom of image
+            #and put both stripes in one array
+            bg = np.r_[image[0:5,:,ch],image[-5:,:,ch]]
+            #vertical mean
+            bg = cv2.reduce(bg, 0, cv2.REDUCE_AVG)
+            #stack to get it back to 100x88 pixel image
+            bg = np.tile(bg,(100,1))
+            #remove the background
+            image[:,:,ch] = cv2.subtract(image[:,:,ch],bg)
+    return image
+
+
+def pad_arguments_np2cv(padding_mode):
+    """
+    NumPy's pad and OpenCVs copyMakeBorder can do the same thing, but the 
+    function arguments are called differntly.
+
+    This function takes numpy padding_mode argument and returns the 
+    corresponsing borderType for cv2.copyMakeBorder
+
+    Parameters
+    ---------- 
+    padding_mode: str; numpy padding mode
+        - "constant" (default): Pads with a constant value.
+        - "edge": Pads with the edge values of array.
+        - "linear_ramp": Pads with the linear ramp between end_value and the array edge value.
+        - "maximum": Pads with the maximum value of all or part of the vector along each axis.
+        - "mean": Pads with the mean value of all or part of the vector along each axis.
+        - "median": Pads with the median value of all or part of the vector along each axis.
+        - "minimum": Pads with the minimum value of all or part of the vector along each axis.
+        - "reflect": Pads with the reflection of the vector mirrored on the first and last values of the vector along each axis.
+        - "symmetric": Pads with the reflection of the vector mirrored along the edge of the array.
+        - "wrap": Pads with the wrap of the vector along the axis. The first values are used to pad the end and the end values are used to pad the beginning.
+
+    Returns
+    ----------   
+    str: OpenCV borderType, or "delete" or "alternate"    
+        - "cv2.BORDER_CONSTANT": iiiiii|abcdefgh|iiiiiii with some specified i 
+        - "cv2.BORDER_REFLECT": fedcba|abcdefgh|hgfedcb
+        - "cv2.BORDER_REFLECT_101": gfedcb|abcdefgh|gfedcba
+        - "cv2.BORDER_DEFAULT": same as BORDER_REFLECT_101
+        - "cv2.BORDER_REPLICATE": aaaaaa|abcdefgh|hhhhhhh
+        - "cv2.BORDER_WRAP": cdefgh|abcdefgh|abcdefg
+    """
+    #Check if padding_mode is already an OpenCV borderType
+    padmodes_cv = ["cv2.BORDER_CONSTANT","cv2.BORDER_REFLECT",
+                   "cv2.BORDER_REFLECT_101","cv2.BORDER_DEFAULT",
+                   "cv2.BORDER_REPLICATE","cv2.BORDER_WRAP"]
+    padmodes_cv += ["delete","alternate"]
+    #padmodes_cv = [a.lower() for a in padmodes_cv]
+    
+    #If padding_mode is already one of those, just return the identity
+    if padding_mode in padmodes_cv:
+        return padding_mode
+    
+    if "cv2" in padding_mode and "constant" in padding_mode:
+        return "cv2.BORDER_CONSTANT"
+    elif "cv2" in padding_mode and "replicate" in padding_mode:
+        return "cv2.BORDER_REPLICATE"    
+    elif "cv2" in padding_mode and "reflect_101" in padding_mode:
+        return "cv2.BORDER_REFLECT_101"    
+    elif "cv2" in padding_mode and "reflect" in padding_mode:
+        return "cv2.BORDER_REFLECT"    
+    elif "cv2" in padding_mode and "wrap" in padding_mode:
+        return "cv2.BORDER_WRAP" 
+
+    #Check that the padding_mode is actually supported by OpenCV
+    supported = ["constant","edge","reflect","symmetric","wrap","delete","alternate"]
+    assert padding_mode.lower() in supported, "The padding mode: '"+padding_mode+"' is not supported"
+    
+    #Otherwise, return the an OpenCV borderType corresponding to the numpy pad mode
+    if padding_mode=="constant":
+        return "cv2.BORDER_CONSTANT"
+    if padding_mode=="edge":
+        return "cv2.BORDER_REPLICATE"
+    if padding_mode=="reflect":
+        return "cv2.BORDER_REFLECT_101"
+    if padding_mode=="symmetric":
+        return "cv2.BORDER_REFLECT"
+    if padding_mode=="wrap":
+        return "cv2.BORDER_WRAP"
+
+
+def image_crop_pad_cv2(images,pos_x,pos_y,pix,final_h,final_w,padding_mode="cv2.BORDER_CONSTANT"):
+    """
+    Function takes a list images (list of numpy arrays) an resizes them to 
+    equal size by center cropping and/or padding.
+
+    Parameters
+    ----------
+    images: list of images of arbitrary shape
+    (nr.images,height,width,channels) 
+        can be a single image or multiple images
+    pos_x: float or ndarray of length N
+        The x coordinate(s) of the centroid of the event(s) [um]
+    pos_y: float or ndarray of length N
+        The y coordinate(s) of the centroid of the event(s) [um]
+        
+    final_h: int
+        target image height [pixels]
+    
+    final_w: int
+        target image width [pixels]
+        
+    padding_mode: str; OpenCV BorderType
+        Perform the following padding operation if the cell is too far at the 
+        border such that the  desired image size cannot be 
+        obtained without going beyond the order of the image:
                 
-        #Adjust the meta for the nr. of stored cells
-        meta["experiment"]["event count"] = np.sum(np.array([len(indi) for indi in Indices])) 
+        #the following text is copied from 
+        https://docs.opencv.org/3.4/d2/de8/group__core__array.html#ga209f2f4869e304c82d07739337eae7c5        
+        - "cv2.BORDER_CONSTANT": iiiiii|abcdefgh|iiiiiii with some specified i 
+        - "cv2.BORDER_REFLECT": fedcba|abcdefgh|hgfedcb
+        - "cv2.BORDER_REFLECT_101": gfedcb|abcdefgh|gfedcba
+        - "cv2.BORDER_DEFAULT": same as BORDER_REFLECT_101
+        - "cv2.BORDER_REPLICATE": aaaaaa|abcdefgh|hhhhhhh
+        - "cv2.BORDER_WRAP": cdefgh|abcdefgh|abcdefg
+
+        - "delete": Return empty array (all zero) if the cell is too far at border (delete image)
+        - "alternate": randomize the padding operation
+    Returns
+    ----------
+    images: list of images. Each image is a numpy array of shape 
+    (final_h,final_w,channels) 
+
+    """
+    #Convert position of cell from "um" to "pixel index"
+    #pos_x,pos_y = pos_x/pix,pos_y/pix  
+    padding_modes = ["cv2.BORDER_CONSTANT","cv2.BORDER_REFLECT","cv2.BORDER_REFLECT_101","cv2.BORDER_REPLICATE","cv2.BORDER_WRAP"]
+    
+    for i in range(len(images)):
+        image = images[i]
+    
+        #Compute the edge-coordinates that define the cropped image
+        y1 = np.around(pos_y[i]-final_h/2.0)              
+        x1 = np.around(pos_x[i]-final_w/2.0) 
+        y2 = y1+final_h               
+        x2 = x1+final_w
+
+        #Are these coordinates within the oringinal image?
+        #If not, the image needs padding
+        pad_top,pad_bottom,pad_left,pad_right = 0,0,0,0
+
+        if y1<0:#Padding is required on top of image
+            pad_top = int(abs(y1))
+            y1 = 0 #set y1 to zero and pad pixels after cropping
+            
+        if y2>image.shape[0]:#Padding is required on bottom of image
+            pad_bottom = int(y2-image.shape[0])
+            y2 = image.shape[0]
         
-        #features = rtdc_ds._events.keys() #Get the names of the online features
-        compression = 'gzip'    
+        if x1<0:#Padding is required on left of image
+            pad_left = int(abs(x1))
+            x1 = 0
         
-        with dclab.rtdc_dataset.write_hdf5.write(path_or_h5file=fname,meta=meta, mode="append") as h5obj:
-            # write each feature individually
-            for feat in features:
-                # event-wise, because
-                # - tdms-based datasets don't allow indexing with numpy
-                # - there might be memory issues
-                if feat == "contour":
-                    cont_list = [rtdc_ds["contour"][ii] for ii in indices]
-                    dclab.rtdc_dataset.write_hdf5.write(h5obj,
-                          data={"contour": cont_list},
-                          mode="append",
-                          compression=compression)
-                elif feat == "index":
-                    dclab.rtdc_dataset.write_hdf5.write(h5obj,
-                          data={"index": index_new_},
-                          mode="append",
-                          compression=compression)
-                elif feat in ["mask", "image"]:
-                    # store image stacks (reduced file size and save time)
-                    m = 64
-                    if feat=='mask':
-                        im0 = rtdc_ds[feat][0]
-                    if feat=="image":
-                        im0 = rtdc_ds[feat][0]
-                    imstack = np.zeros((m, im0.shape[0], im0.shape[1]),
-                                       dtype=im0.dtype)
-                    jj = 0
-                    if feat=='mask':
-                        image_list = [rtdc_ds[feat][ii] for ii in indices]
-                    elif feat=='image':
-                        image_list = [rtdc_ds[feat][ii] for ii in indices]
-                    for ii in range(len(image_list)):
-                        dat = image_list[ii]
-                        #dat = rtdc_ds[feat][ii]
-                        imstack[jj] = dat
-                        if (jj + 1) % m == 0:
-                            jj = 0
-                            dclab.rtdc_dataset.write_hdf5.write(h5obj,
-                                  data={feat: imstack},
-                                  mode="append",
-                                  compression=compression)
-                        else:
-                            jj += 1
-                    # write rest
-                    if jj:
-                        dclab.rtdc_dataset.write_hdf5.write(h5obj,
-                              data={feat: imstack[:jj, :, :]},
-                              mode="append",
-                              compression=compression)
-                elif feat == "trace":
-                    for tr in rtdc_ds["trace"].keys():
-                        tr0 = rtdc_ds["trace"][tr][0]
-                        trdat = np.zeros((len(indices), tr0.size), dtype=tr0.dtype)
-                        jj = 0
-                        trace_list = [rtdc_ds["trace"][tr][ii] for ii in indices]
-                        for ii in range(len(trace_list)):
-                            trdat[jj] = trace_list[ii]
-                            jj += 1
-                        dclab.rtdc_dataset.write_hdf5.write(h5obj,
-                              data={"trace": {tr: trdat}},
-                              mode="append",
-                              compression=compression)
-                
+        if x2>image.shape[1]:#Padding is required on right of image
+            pad_right = int(x2-image.shape[1])
+            x2 = image.shape[1]
+        
+        #Crop the image
+        temp = image[int(y1):int(y2),int(x1):int(x2)]
+
+        if pad_top+pad_bottom+pad_left+pad_right>0:
+            if padding_mode.lower()=="delete":
+                temp = np.zeros_like(temp)
+            else:
+                #Perform all padding operations in one go
+                if padding_mode.lower()=="alternate":
+                    ind = rand_state.randint(low=0,high=len(padding_modes))
+                    padding_mode = padding_modes[ind]
+                    temp = cv2.copyMakeBorder(temp, pad_top, pad_bottom, pad_left, pad_right, eval(padding_modes[ind]))
                 else:
-                    dclab.rtdc_dataset.write_hdf5.write(h5obj,
-                          data={feat: rtdc_ds[feat][indices]},mode="append")
-
-            if "index" not in feat:
-                dclab.rtdc_dataset.write_hdf5.write(h5obj,
-                      data={"index": np.array(range(len(indices)))+1}, #ShapeOut likes to start with index=1
-                      mode="append",
-                      compression=compression)
-
-                
-            h5obj.close()
+                    temp = cv2.copyMakeBorder(temp, pad_top, pad_bottom, pad_left, pad_right, eval(padding_mode))
+        
+        images[i] = temp
+            
+    return images
 
 
 class MyTable(QtWidgets.QTableWidget):
@@ -270,7 +484,7 @@ class MyTable(QtWidgets.QTableWidget):
 
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
-        MainWindow.setObjectName("MainWindow")
+        MainWindow.setObjectName("YouLabel_v"+VERSION)
         MainWindow.resize(773, 652)
         sys.excepthook = MyExceptionHook
 
@@ -308,17 +522,31 @@ class Ui_MainWindow(object):
         self.splitter = QtWidgets.QSplitter(self.tab_work)
         self.splitter.setOrientation(QtCore.Qt.Horizontal)
         self.splitter.setObjectName("splitter")
-        self.label_showFullImage = QtWidgets.QLabel(self.splitter)
-        self.label_showFullImage.setMinimumSize(QtCore.QSize(462, 131))
-        self.label_showFullImage.setMaximumSize(QtCore.QSize(462, 131))
+        
+        self.label_showFullImage = pg.ImageView(self.splitter)
+        self.label_showFullImage.setMinimumSize(QtCore.QSize(0, 200))
+        self.label_showFullImage.setMaximumSize(QtCore.QSize(9999999, 200))
+        self.label_showFullImage.ui.histogram.hide()
+        self.label_showFullImage.ui.roiBtn.hide()
+        self.label_showFullImage.ui.menuBtn.hide()
+
         self.label_showFullImage.setObjectName("label_showFullImage")
-        self.label_showCroppedImage = QtWidgets.QLabel(self.splitter)
-        self.label_showCroppedImage.setMinimumSize(QtCore.QSize(253, 131))
-        self.label_showCroppedImage.setMaximumSize(QtCore.QSize(253, 131))
+        self.label_showCroppedImage = pg.ImageView(self.splitter)
+        self.label_showCroppedImage.setMinimumSize(QtCore.QSize(0, 200))
+        self.label_showCroppedImage.setMaximumSize(QtCore.QSize(9999999, 200))
+        self.label_showCroppedImage.ui.histogram.hide()
+        self.label_showCroppedImage.ui.roiBtn.hide()
+        self.label_showCroppedImage.ui.menuBtn.hide()
+
+        
         self.label_showCroppedImage.setObjectName("label_showCroppedImage")
         self.verticalLayout.addWidget(self.splitter)
         self.horizontalLayout_4 = QtWidgets.QHBoxLayout()
         self.horizontalLayout_4.setObjectName("horizontalLayout_4")
+        self.horizontalSlider_channel = QtWidgets.QSlider(self.tab_work)
+        self.horizontalSlider_channel.setOrientation(QtCore.Qt.Horizontal)
+        self.horizontalSlider_channel.setObjectName("horizontalSlider_channel")
+        self.horizontalLayout_4.addWidget(self.horizontalSlider_channel)
         self.horizontalSlider_index = QtWidgets.QSlider(self.tab_work)
         self.horizontalSlider_index.setOrientation(QtCore.Qt.Horizontal)
         self.horizontalSlider_index.setObjectName("horizontalSlider_index")
@@ -334,7 +562,7 @@ class Ui_MainWindow(object):
         self.pushButton_true.setMinimumSize(QtCore.QSize(151, 28))
         self.pushButton_true.setMaximumSize(QtCore.QSize(151, 28))
         self.pushButton_true.setObjectName("pushButton_true")
-        self.horizontalLayout_3.addWidget(self.pushButton_true)
+        self.horizontalLayout_3.addWidget(self.pushButton_true)      
         self.horizontalLayout_2 = QtWidgets.QHBoxLayout()
         self.horizontalLayout_2.setObjectName("horizontalLayout_2")
         self.radioButton_true = QtWidgets.QRadioButton(self.tab_work)
@@ -355,6 +583,12 @@ class Ui_MainWindow(object):
         self.pushButton_false.setMaximumSize(QtCore.QSize(151, 28))
         self.pushButton_false.setObjectName("pushButton_false")
         self.horizontalLayout_3.addWidget(self.pushButton_false)
+
+
+
+
+
+
         self.horizontalLayout_4.addLayout(self.horizontalLayout_3)
         self.verticalLayout.addLayout(self.horizontalLayout_4)
         self.gridLayout_5.addLayout(self.verticalLayout, 0, 0, 1, 2)
@@ -367,9 +601,102 @@ class Ui_MainWindow(object):
         self.tableWidget_decisions.setColumnCount(0)
         self.tableWidget_decisions.setRowCount(0)
         self.gridLayout_4.addWidget(self.tableWidget_decisions, 0, 0, 1, 1)
-        self.gridLayout_5.addWidget(self.groupBox_decisions, 1, 0, 1, 1)
         
-        self.groupBox_saving = QtWidgets.QGroupBox(self.tab_work)
+        
+        
+        
+        self.verticalLayout_4 = QtWidgets.QVBoxLayout()
+        self.verticalLayout_4.setObjectName("verticalLayout_4")
+        self.groupBox_imgProc = QtWidgets.QGroupBox(self.groupBox_decisions)
+        self.groupBox_imgProc.setObjectName("groupBox_imgProc")
+        self.gridLayout_49 = QtWidgets.QGridLayout(self.groupBox_imgProc)
+        self.gridLayout_49.setObjectName("gridLayout_49")
+        self.comboBox_GrayOrRGB = QtWidgets.QComboBox(self.groupBox_imgProc)
+        self.comboBox_GrayOrRGB.setObjectName("comboBox_GrayOrRGB")
+        self.comboBox_GrayOrRGB.addItem("")
+        self.comboBox_GrayOrRGB.addItem("")
+
+        self.gridLayout_49.addWidget(self.comboBox_GrayOrRGB, 1, 4, 1, 1)
+        self.horizontalLayout_crop = QtWidgets.QHBoxLayout()
+        self.horizontalLayout_crop.setObjectName("horizontalLayout_crop")
+        self.label_CropIcon_2 = QtWidgets.QLabel(self.groupBox_imgProc)
+        self.label_CropIcon_2.setText("")
+        
+        self.label_CropIcon_2.setPixmap(QtGui.QPixmap(os.path.join(dir_root,"art","cropping.png")))
+        self.label_CropIcon_2.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
+        self.label_CropIcon_2.setObjectName("label_CropIcon_2")
+        self.horizontalLayout_crop.addWidget(self.label_CropIcon_2)
+        self.label_Crop = QtWidgets.QLabel(self.groupBox_imgProc)
+        self.label_Crop.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
+        self.label_Crop.setObjectName("label_Crop")
+        self.horizontalLayout_crop.addWidget(self.label_Crop)
+        self.gridLayout_49.addLayout(self.horizontalLayout_crop, 0, 0, 1, 1)
+        self.horizontalLayout_colorMode = QtWidgets.QHBoxLayout()
+        self.horizontalLayout_colorMode.setObjectName("horizontalLayout_colorMode")
+        self.label_colorModeIcon = QtWidgets.QLabel(self.groupBox_imgProc)
+        self.label_colorModeIcon.setText("")
+        self.label_colorModeIcon.setPixmap(QtGui.QPixmap(os.path.join(dir_root,"art","color_mode.png")))
+        self.label_colorModeIcon.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
+        self.label_colorModeIcon.setObjectName("label_colorModeIcon")
+        self.horizontalLayout_colorMode.addWidget(self.label_colorModeIcon)
+        self.label_colorMode = QtWidgets.QLabel(self.groupBox_imgProc)
+        self.label_colorMode.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
+        self.label_colorMode.setObjectName("label_colorMode")
+        self.horizontalLayout_colorMode.addWidget(self.label_colorMode)
+        self.gridLayout_49.addLayout(self.horizontalLayout_colorMode, 1, 3, 1, 1)
+        self.horizontalLayout_nrEpochs = QtWidgets.QHBoxLayout()
+        self.horizontalLayout_nrEpochs.setObjectName("horizontalLayout_nrEpochs")
+        self.label_padIcon = QtWidgets.QLabel(self.groupBox_imgProc)
+        self.label_padIcon.setText("")
+        self.label_padIcon.setPixmap(QtGui.QPixmap(os.path.join(dir_root,"art","padding.png")))
+        self.label_padIcon.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
+        self.label_padIcon.setObjectName("label_padIcon")
+        self.horizontalLayout_nrEpochs.addWidget(self.label_padIcon)
+        self.label_paddingMode = QtWidgets.QLabel(self.groupBox_imgProc)
+        self.label_paddingMode.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
+        self.label_paddingMode.setObjectName("label_paddingMode")
+        self.horizontalLayout_nrEpochs.addWidget(self.label_paddingMode)
+        self.gridLayout_49.addLayout(self.horizontalLayout_nrEpochs, 1, 0, 1, 1)
+        self.comboBox_BgRemove = QtWidgets.QComboBox(self.groupBox_imgProc)
+        self.comboBox_BgRemove.setMinimumSize(QtCore.QSize(200, 0))
+        self.comboBox_BgRemove.setObjectName("comboBox_BgRemove")
+        self.comboBox_BgRemove.addItem("")
+        self.comboBox_BgRemove.addItem("")
+
+        self.gridLayout_49.addWidget(self.comboBox_BgRemove, 0, 4, 1, 1)
+        self.spinBox_cropsize = QtWidgets.QSpinBox(self.groupBox_imgProc)
+        self.spinBox_cropsize.setMinimum(1)
+        self.spinBox_cropsize.setMaximum(999999)
+        self.spinBox_cropsize.setProperty("value", 64)
+        self.spinBox_cropsize.setObjectName("spinBox_cropsize")
+        self.gridLayout_49.addWidget(self.spinBox_cropsize, 0, 1, 1, 1)
+        self.comboBox_paddingMode = QtWidgets.QComboBox(self.groupBox_imgProc)
+        self.comboBox_paddingMode.setEnabled(True)
+        self.comboBox_paddingMode.setObjectName("comboBox_paddingMode")
+        self.comboBox_paddingMode.addItem("")
+        self.comboBox_paddingMode.addItem("")
+        self.comboBox_paddingMode.addItem("")
+        self.comboBox_paddingMode.addItem("")
+        self.comboBox_paddingMode.addItem("")
+        self.comboBox_paddingMode.addItem("")
+        self.gridLayout_49.addWidget(self.comboBox_paddingMode, 1, 1, 1, 1)
+        self.horizontalLayout_normalization = QtWidgets.QHBoxLayout()
+        self.horizontalLayout_normalization.setObjectName("horizontalLayout_normalization")
+        self.label_NormalizationIcon = QtWidgets.QLabel(self.groupBox_imgProc)
+        self.label_NormalizationIcon.setText("")
+        self.label_NormalizationIcon.setPixmap(QtGui.QPixmap(os.path.join(dir_root,"art","normalzation.png")))
+        self.label_NormalizationIcon.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
+        self.label_NormalizationIcon.setObjectName("label_NormalizationIcon")
+        self.horizontalLayout_normalization.addWidget(self.label_NormalizationIcon)
+        self.label_Normalization = QtWidgets.QLabel(self.groupBox_imgProc)
+        self.label_Normalization.setLayoutDirection(QtCore.Qt.LeftToRight)
+        self.label_Normalization.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
+        self.label_Normalization.setObjectName("label_Normalization")
+        self.horizontalLayout_normalization.addWidget(self.label_Normalization)
+        self.gridLayout_49.addLayout(self.horizontalLayout_normalization, 0, 3, 1, 1)
+        self.verticalLayout_4.addWidget(self.groupBox_imgProc)
+        
+        self.groupBox_saving = QtWidgets.QGroupBox(self.groupBox_decisions)
         self.groupBox_saving.setObjectName("groupBox_saving")
         self.gridLayout_3 = QtWidgets.QGridLayout(self.groupBox_saving)
         self.gridLayout_3.setObjectName("gridLayout_3")
@@ -391,18 +718,24 @@ class Ui_MainWindow(object):
         self.lineEdit_FalseFname.setObjectName("lineEdit_FalseFname")
         self.verticalLayout_3.addWidget(self.lineEdit_FalseFname)
         self.gridLayout_3.addLayout(self.verticalLayout_3, 1, 0, 1, 1)
-        self.gridLayout_5.addWidget(self.groupBox_saving, 1, 1, 1, 1)
+        self.verticalLayout_4.addWidget(self.groupBox_saving)
+        self.gridLayout_4.addLayout(self.verticalLayout_4, 0, 1, 1, 1)
+        self.gridLayout_5.addWidget(self.groupBox_decisions, 1, 0, 1, 1)
         self.tabWidget.addTab(self.tab_work, "")
-
         self.gridLayout.addWidget(self.tabWidget, 0, 0, 1, 1)
         MainWindow.setCentralWidget(self.centralwidget)
         self.menubar = QtWidgets.QMenuBar(MainWindow)
-        self.menubar.setGeometry(QtCore.QRect(0, 0, 773, 26))
+        self.menubar.setGeometry(QtCore.QRect(0, 0, 1082, 25))
         self.menubar.setObjectName("menubar")
         MainWindow.setMenuBar(self.menubar)
         self.statusbar = QtWidgets.QStatusBar(MainWindow)
         self.statusbar.setObjectName("statusbar")
         MainWindow.setStatusBar(self.statusbar)
+        
+        
+        
+        
+        
 
         self.retranslateUi(MainWindow)
         self.tabWidget.setCurrentIndex(0)
@@ -428,6 +761,9 @@ class Ui_MainWindow(object):
         self.shortcut_true.activated.connect(self.true_cell)
         self.shortcut_false = QtGui.QShortcut(QtGui.QKeySequence("F"), self.tabWidget)
         self.shortcut_false.activated.connect(self.false_cell)
+        self.shortcut_channel = QtGui.QShortcut(QtGui.QKeySequence("C"), self.tabWidget)
+        self.shortcut_channel.activated.connect(self.next_channel)
+
         self.pushButton_true.clicked.connect(self.true_cell)
         self.pushButton_false.clicked.connect(self.false_cell)
 
@@ -438,6 +774,11 @@ class Ui_MainWindow(object):
 
         self.horizontalSlider_index.valueChanged.connect(self.onIndexChange)
         self.spinBox_index.valueChanged.connect(self.onIndexChange)
+        self.spinBox_cropsize.valueChanged.connect(lambda ind: self.put_image(self.spinBox_index.value()))
+        self.comboBox_paddingMode.currentIndexChanged.connect(lambda ind: self.put_image(self.spinBox_index.value()))
+        self.comboBox_BgRemove.currentIndexChanged.connect(lambda ind: self.put_image(self.spinBox_index.value()))
+        self.horizontalSlider_channel.valueChanged.connect(lambda ind: self.put_image(self.spinBox_index.value()))
+        self.comboBox_GrayOrRGB.currentIndexChanged.connect(lambda ind: self.put_image(self.spinBox_index.value()))
         
         self.lineEdit_TrueFname.setText("True.rtdc")
         self.lineEdit_FalseFname.setText("False.rtdc")
@@ -461,17 +802,55 @@ class Ui_MainWindow(object):
 
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
-        MainWindow.setWindowTitle(_translate("MainWindow", "MainWindow"))
+        MainWindow.setWindowTitle(_translate("MainWindow", "YouLabel_v"+VERSION))
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.LoadFiles), _translate("MainWindow", "Load Files"))
         self.pushButton_start.setText(_translate("MainWindow", "Start"))
         self.pushButton_true.setText(_translate("MainWindow", "TRUE!"))
+        self.pushButton_true.setToolTip(_translate("MainWindow", "Shortcut: T"))
         self.pushButton_false.setText(_translate("MainWindow", "FALSE!"))
+        self.pushButton_false.setToolTip(_translate("MainWindow", "Shortcut: F"))
+        self.horizontalSlider_index.setToolTip(_translate("MainWindow", "Shortcut: Left/Right arrow"))
+        self.horizontalSlider_channel.setToolTip(_translate("MainWindow", "Shortcut: C"))
+
         self.groupBox_decisions.setTitle(_translate("MainWindow", "Decisions"))
+        self.groupBox_imgProc.setTitle(_translate("MainWindow", "Image processing"))
+        self.label_Crop.setToolTip(_translate("MainWindow", "Define size of the cropped image (right)."))
+        self.label_Crop.setText(_translate("MainWindow", "Cropping size"))
+        self.label_colorMode.setText(_translate("MainWindow", "Color Mode"))
+        self.label_paddingMode.setText(_translate("MainWindow", "Padding mode"))
+        self.comboBox_paddingMode.setToolTip(_translate("MainWindow", "By default, the padding mode is \"constant\", which means that zeros are padded.\n"
+"\"edge\": Pads with the edge values of array.\n"
+"\"linear_ramp\": Pads with the linear ramp between end_value and the array edge value.\n"
+"\"maximum\": Pads with the maximum value of all or part of the vector along each axis.\n"
+"\"mean\": Pads with the mean value of all or part of the vector along each axis.\n"
+"\"median\": Pads with the median value of all or part of the vector along each axis.\n"
+"\"minimum\": Pads with the minimum value of all or part of the vector along each axis.\n"
+"\"reflect\": Pads with the reflection of the vector mirrored on the first and last values of the vector along each axis.\n"
+"\"symmetric\": Pads with the reflection of the vector mirrored along the edge of the array.\n"
+"\"wrap\": Pads with the wrap of the vector along the axis. The first values are used to pad the end and the end values are used to pad the beginning.\n"
+"Text copied from https://docs.scipy.org/doc/numpy/reference/generated/numpy.pad.html"))
+        self.comboBox_paddingMode.setItemText(0, _translate("MainWindow", "constant"))
+        self.comboBox_paddingMode.setItemText(1, _translate("MainWindow", "edge"))
+        self.comboBox_paddingMode.setItemText(2, _translate("MainWindow", "reflect"))
+        self.comboBox_paddingMode.setItemText(3, _translate("MainWindow", "symmetric"))
+        self.comboBox_paddingMode.setItemText(4, _translate("MainWindow", "wrap"))
+        self.comboBox_paddingMode.setItemText(5, _translate("MainWindow", "alternate"))
+
+        self.comboBox_GrayOrRGB.setItemText(0, _translate("MainWindow", "Grayscale"))
+        self.comboBox_GrayOrRGB.setItemText(1, _translate("MainWindow", "RGB"))
+
+        self.comboBox_BgRemove.setItemText(0, _translate("MainWindow", "None"))
+        self.comboBox_BgRemove.setItemText(1, _translate("MainWindow", "vstripes_removal"))
+       
+        self.label_Normalization.setToolTip(_translate("MainWindow", "Define, if a particular backgound removal algorithm should be applied (chnages only the appearance of the displayed image. Has no effect during saving (original images are saved)"))
+        self.label_Normalization.setText(_translate("MainWindow", "Background removal"))
         self.groupBox_saving.setTitle(_translate("MainWindow", "Saving"))
         self.pushButton_saveTrueAs.setText(_translate("MainWindow", "Save TRUE cells as..."))
+        self.pushButton_saveTrueAs.setToolTip(_translate("MainWindow", "File is saved into same directory as original file."))
         self.pushButton_saveFalseAs.setText(_translate("MainWindow", "Save FALSE cells as..."))
-        self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_work), _translate("MainWindow", "Work"))
+        self.pushButton_saveFalseAs.setToolTip(_translate("MainWindow", "File is saved into same directory as original file."))
 
+        self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_work), _translate("MainWindow", "Label Images"))
 
 
 
@@ -593,39 +972,91 @@ class Ui_MainWindow(object):
 
     def put_image(self,ind):
         img = self.Images[ind]
+        if len(img.shape)==2:
+            print("Invalid image shape "+str(img.shape))
+            return
+            #channels = 1 #actually that case should not never exist as np.expand_dims was used before to get images in format (NHWC)
+        elif len(img.shape)==3:
+            height, width, channels = img.shape
+            print("Img.shape"+str(img.shape))
+        else:
+            print("Invalid image format: "+str(img.shape))
+            return
 
-        #zoom image such that longest side is 512
-        factor = np.round(float(512.0/np.max(img.shape)),0)
-        #img_zoom = zoom(img,factor)
-        img_zoom = ndimage.zoom(img, zoom=factor,order=0) #Order 0 means nearest neighbor interplation
+        channel_targ = int(self.horizontalSlider_channel.value())
+        color_mode = str(self.comboBox_GrayOrRGB.currentText())
+        if channel_targ<img.shape[-1]:
+            img = img[:,:,channel_targ] #select single channel which is displayed
+
+        #if the slider is on the very right: create superposition of all channels
+        elif channel_targ>=img.shape[-1]:
+            if color_mode=="Grayscale":
+                #if Color_Mode is grayscale, convert RGB to grayscale
+                #simply by taking the mean across all channels
+                img = np.mean(img,axis=-1).astype(np.uint8)
+            elif color_mode=="RGB":
+                if channels==1:
+                    #there is just one channel provided, but for displyaing, 
+                    #3 channels are needed: add two zero-channels
+                    zeros = np.zeros(img.shape[:2]+(1,))
+                    img = np.c_[img,zeros,zeros]
+                    print("Added 2nd and 3rd channel: "+str(img.shape))
+
+                elif channels==2:
+                    #there are just two channel provided, but for displyaing, 
+                    #3 channels are needed add one zero-channel
+                    zeros = np.zeros(img.shape[:2]+(1,))
+                    img = np.c_[img,zeros]
+                    print("Added 3rd channel: "+str(img.shape))
+
+        #Background removal:
+        if str(self.comboBox_BgRemove.currentText())=="":
+            img = img#no removal
+        elif str(self.comboBox_BgRemove.currentText())=="vstripes_removal":
+            img = vstripes_removal(img)
+
+        #zoom image such that longest side is 200
+        factor = np.round(float(200/np.max(img.shape)),0)
+        img_zoom =  cv2.resize(img, dsize=None,fx=factor, fy=factor, interpolation=cv2.INTER_LINEAR)
 
         img_zoom = np.ascontiguousarray(img_zoom)
-        height, width = img_zoom.shape
-        qi=QtGui.QImage(img_zoom.data, width, height,width, QtGui.QImage.Format_Indexed8)
-        self.label_showFullImage.setPixmap(QtGui.QPixmap.fromImage(qi))
-          
+        print("Shape of zoomed image: "+str(img_zoom.shape))
+        
+        if color_mode=="Grayscale":
+            self.label_showFullImage.setImage(img_zoom.T,autoRange=False)
+        elif color_mode=="RGB":
+            self.label_showFullImage.setImage(np.swapaxes(img_zoom,0,1),autoRange=False)
+            
+        self.label_showFullImage.ui.histogram.hide()
+        self.label_showFullImage.ui.roiBtn.hide()
+        self.label_showFullImage.ui.menuBtn.hide()
+
         #get the location of the cell
         PIX = self.rtdc_ds.config["imaging"]["pixel size"]
         
         pos_x,pos_y = self.rtdc_ds["pos_x"][ind]/PIX,self.rtdc_ds["pos_y"][ind]/PIX
-        cropsize = 64
-        y1 = int(round(pos_y))-cropsize/2                
-        x1 = int(round(pos_x))-cropsize/2 
-        y2 = y1+cropsize                
-        x2 = x1+cropsize
-        img_crop = img[int(y1):int(y2),int(x1):int(x2)]
+        cropsize = self.spinBox_cropsize.value()
+        
+        padding_mode = str(self.comboBox_paddingMode.currentText())
+        padding_mode = pad_arguments_np2cv(padding_mode)
+        img_crop = image_crop_pad_cv2([img],[pos_x],[pos_y],PIX,cropsize,cropsize,padding_mode=padding_mode)
+        img_crop = img_crop[0]
         #zoom image such that the height gets the same as for non-cropped img
         factor = float(float(height)/np.max(img_crop.shape[0]))
         if np.isinf(factor):
             factor = 2.5
-        #img_crop = zoom(img_crop,factor)
-        img_crop = ndimage.zoom(img_crop, zoom=factor,order=0)
+        img_crop =  cv2.resize(img_crop, dsize=None,fx=factor, fy=factor, interpolation=cv2.INTER_LINEAR)
+
         img_crop = np.ascontiguousarray(img_crop)
-        height, width = img_crop.shape
-        img_crop = np.ascontiguousarray(img_crop)
-        height, width = img_crop.shape
-        qi=QtGui.QImage(img_crop.data, width, height,width, QtGui.QImage.Format_Indexed8)
-        self.label_showCroppedImage.setPixmap(QtGui.QPixmap.fromImage(qi))
+
+        if color_mode=="Grayscale":
+            self.label_showCroppedImage.setImage(img_crop.T,autoRange=False)
+        elif color_mode=="RGB":
+            self.label_showCroppedImage.setImage(np.swapaxes(img_crop,0,1),autoRange=False)
+            
+        self.label_showCroppedImage.ui.histogram.hide()
+        self.label_showCroppedImage.ui.roiBtn.hide()
+        self.label_showCroppedImage.ui.menuBtn.hide()
 
 
     def start_analysis(self):
@@ -644,14 +1075,30 @@ class Ui_MainWindow(object):
         self.rtdc_ds = rtdc_ds
         
         #Load the first image and show on label_showFullImage and label_showCroppedImage
-        nr_images = rtdc_ds["image"].len()
+        image_shape = rtdc_ds["image"].shape
+        nr_images = image_shape[0]
         self.spinBox_index.setRange(0,nr_images-1)
         self.horizontalSlider_index.setRange(0,nr_images-1)
         #Set both to zero
         self.spinBox_index.setValue(0)
         self.horizontalSlider_index.setValue(0)
         
-        self.Images = rtdc_ds["image"][:]
+        
+        #check if there other channels available
+        h5 = h5py.File(rtdc_path, 'r')
+        keys = list(h5["events"].keys())
+        ind_ch = np.array(["image_ch" in key for key in keys])
+        channels = np.sum(ind_ch) #1+ is because there is always at least one channel (rtdc_ds["image"])
+        ind_ch = np.where(ind_ch==True)[0]
+        keys_ch = list(np.array(keys)[ind_ch])
+        #Set the slider such that every channel can be selected
+        self.horizontalSlider_channel.setRange(0,channels+1) #add one more dimension for a "blending"/superposition channel
+        #Define variable on self that carries all image information
+        if channels==0:
+            self.Images = np.expand_dims(rtdc_ds["image"][:],-1)
+        elif channels>0:
+            self.Images = np.stack( [rtdc_ds["image"][:]] + [h5["events"][key][:] for key in keys_ch] ,axis=-1)            
+
         self.put_image(ind=0)
         
         #Empty tableWidget_decisions
@@ -734,13 +1181,33 @@ class Ui_MainWindow(object):
         if index<len(self.rtdc_ds["pos_x"]):
             self.onIndexChange(index-1)
 
+    def next_channel(self):
+        "Shift the slider horizontalSlider_channel to the next location"
+        
+        #Only continue, if a dataset was already loaded:
+        if self.comboBox_selectFile.count()<1:
+            return
+        
+        #get current location of slider
+        slider_current = int(self.horizontalSlider_channel.value())
+        #get the maximum position
+        slider_max = self.horizontalSlider_channel.maximum()
+        
+        if slider_current == slider_max:
+            self.horizontalSlider_channel.setValue(0)
+        else:
+            self.horizontalSlider_channel.setValue(slider_current+1)            
+        
+        
     def save_true_events(self):
         #read from table, which events are true
         rows = self.tableWidget_decisions.rowCount()
         decisions = []
         for row in range(rows):
             decisions.append(str(self.tableWidget_decisions.item(row, 0).text()))
-        ind = np.where(np.array(decisions)=="True")[0]        
+        decisions = [dec=="True" for dec in decisions]
+
+        ind = np.where(np.array(decisions)==True)[0]        
         #what is the filename of the initial file?
         fname = str(self.comboBox_selectFile.currentText())
         rtdc_path = fname
@@ -748,8 +1215,12 @@ class Ui_MainWindow(object):
         #what is the user defined ending?
         ending = str(self.lineEdit_TrueFname.text())
         fname = fname+"_"+ending
+        
+        #write information about these events to excel file
+        #fname_excel = fname.split(".rtdc")[0]+".csv"        
+        
         #write_rtdc expects lists of experiments. Here we will only have a single exp. 
-        write_rtdc(fname,[rtdc_path],[ind])
+        write_rtdc(fname,rtdc_path,ind,np.array(decisions))
         print("Saved true events")
 
 
@@ -759,7 +1230,9 @@ class Ui_MainWindow(object):
         decisions = []
         for row in range(rows):
             decisions.append(str(self.tableWidget_decisions.item(row, 0).text()))
-        ind = np.where(np.array(decisions)=="False")[0]        
+        decisions = [dec=="True" for dec in decisions]
+
+        ind = np.where(np.array(decisions)==False)[0]        
         #what is the filename of the initial file?
         fname = str(self.comboBox_selectFile.currentText())
         rtdc_path = fname
@@ -768,11 +1241,10 @@ class Ui_MainWindow(object):
         ending = str(self.lineEdit_FalseFname.text())
         fname = fname+"_"+ending
         #write_rtdc expects lists of experiments. Here we will only have a single exp. 
-        write_rtdc(fname,[rtdc_path],[ind])
+        write_rtdc(fname,rtdc_path,ind,np.array(decisions))
         print("Saved false events")
 
 
-dir_root = os.getcwd()
 if __name__ == "__main__":
     import sys
     app = QtWidgets.QApplication(sys.argv)
