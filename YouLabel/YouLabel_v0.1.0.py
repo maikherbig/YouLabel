@@ -10,8 +10,7 @@ import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtWidgets, QtGui
 import os, sys
 import numpy as np
-rand_state = np.random.RandomState(13) #to get the same random number on diff. PCs
-import dclab
+rand_state = np.random.RandomState(13) #to get the same random number on diff. PCs 
 import traceback
 import cv2
 import h5py,shutil,time
@@ -30,7 +29,7 @@ except AttributeError:
     def _translate(context, text, disambig):
         return QtWidgets.QApplication.translate(context, text, disambig)
 
-VERSION = "0.2.0" #Python 3.7.10 Version
+VERSION = "0.2.0_dev2" #Python 3.7.10 Version
 print("YouLabel Version: "+VERSION)
 
 if sys.platform=="darwin":
@@ -563,21 +562,26 @@ class Ui_MainWindow(object):
         self.pushButton_true.setMaximumSize(QtCore.QSize(151, 28))
         self.pushButton_true.setObjectName("pushButton_true")
         self.horizontalLayout_3.addWidget(self.pushButton_true)      
+
         self.horizontalLayout_2 = QtWidgets.QHBoxLayout()
         self.horizontalLayout_2.setObjectName("horizontalLayout_2")
         self.radioButton_true = QtWidgets.QRadioButton(self.tab_work)
         self.radioButton_true.setMinimumSize(QtCore.QSize(21, 20))
         self.radioButton_true.setMaximumSize(QtCore.QSize(21, 20))
         self.radioButton_true.setText("")
+        self.radioButton_true.setEnabled(False)
+        
         self.radioButton_true.setObjectName("radioButton_true")
         self.horizontalLayout_2.addWidget(self.radioButton_true)
         self.radioButton_false = QtWidgets.QRadioButton(self.tab_work)
         self.radioButton_false.setMinimumSize(QtCore.QSize(21, 20))
         self.radioButton_false.setMaximumSize(QtCore.QSize(21, 20))
         self.radioButton_false.setText("")
+        self.radioButton_false.setEnabled(False)
         self.radioButton_false.setObjectName("radioButton_false")
         self.horizontalLayout_2.addWidget(self.radioButton_false)
         self.horizontalLayout_3.addLayout(self.horizontalLayout_2)
+
         self.pushButton_false = QtWidgets.QPushButton(self.tab_work)
         self.pushButton_false.setMinimumSize(QtCore.QSize(151, 28))
         self.pushButton_false.setMaximumSize(QtCore.QSize(151, 28))
@@ -875,15 +879,15 @@ class Ui_MainWindow(object):
                 #This is very strange, and seems like an unsufficient/dirty solution,
                 #but I never saw it failing two times in a row
                 try:
-                    rtdc_ds = dclab.rtdc_dataset.RTDC_HDF5(rtdc_path)
+                    rtdc_ds = h5py.File(rtdc_path, 'r')
                 except:
-                    rtdc_ds = dclab.rtdc_dataset.RTDC_HDF5(rtdc_path)
+                    rtdc_ds = h5py.File(rtdc_path, 'r')
                     
-                features = rtdc_ds.features
+                features = list(rtdc_ds["events"].keys())
                 #Make sure that there is "images", "pos_x" and "pos_y" available
                 if "image" in features and "pos_x" in features and "pos_y" in features:
-                    nr_images = rtdc_ds["image"].len()
-                    pix = rtdc_ds.config["imaging"]["pixel size"]
+                    nr_images = rtdc_ds["events"]["image"].len()
+                    pix = rtdc_ds.attrs["imaging:pixel size"]
                     fileinfo.append({"rtdc_ds":rtdc_ds,"rtdc_path":rtdc_path,"features":features,"nr_images":nr_images,"pix":pix})
                 else:
                     missing = []
@@ -1032,9 +1036,9 @@ class Ui_MainWindow(object):
         self.label_showFullImage.ui.menuBtn.hide()
 
         #get the location of the cell
-        PIX = self.rtdc_ds.config["imaging"]["pixel size"]
+        PIX = self.rtdc_ds.attrs["imaging:pixel size"]
         
-        pos_x,pos_y = self.rtdc_ds["pos_x"][ind]/PIX,self.rtdc_ds["pos_y"][ind]/PIX
+        pos_x,pos_y = self.rtdc_ds["events"]["pos_x"][ind]/PIX,self.rtdc_ds["events"]["pos_y"][ind]/PIX
         cropsize = self.spinBox_cropsize.value()
         
         padding_mode = str(self.comboBox_paddingMode.currentText())
@@ -1068,14 +1072,14 @@ class Ui_MainWindow(object):
         #This is very strange, and seems like an unsufficient/dirty solution,
         #but I never saw it failing two times in a row
         try:
-            rtdc_ds = dclab.rtdc_dataset.RTDC_HDF5(rtdc_path)
+            rtdc_ds = h5py.File(rtdc_path, 'r')
         except:
-            rtdc_ds = dclab.rtdc_dataset.RTDC_HDF5(rtdc_path)
+            rtdc_ds = h5py.File(rtdc_path, 'r')
         
         self.rtdc_ds = rtdc_ds
         
         #Load the first image and show on label_showFullImage and label_showCroppedImage
-        image_shape = rtdc_ds["image"].shape
+        image_shape = rtdc_ds["events"]["image"].shape
         nr_images = image_shape[0]
         self.spinBox_index.setRange(0,nr_images-1)
         self.horizontalSlider_index.setRange(0,nr_images-1)
@@ -1095,9 +1099,9 @@ class Ui_MainWindow(object):
         self.horizontalSlider_channel.setRange(0,channels+1) #add one more dimension for a "blending"/superposition channel
         #Define variable on self that carries all image information
         if channels==0:
-            self.Images = np.expand_dims(rtdc_ds["image"][:],-1)
+            self.Images = np.expand_dims(rtdc_ds["events"]["image"][:],-1)
         elif channels>0:
-            self.Images = np.stack( [rtdc_ds["image"][:]] + [h5["events"][key][:] for key in keys_ch] ,axis=-1)            
+            self.Images = np.stack( [rtdc_ds["events"]["image"][:]] + [h5["events"][key][:] for key in keys_ch] ,axis=-1)            
 
         self.put_image(ind=0)
         
@@ -1133,9 +1137,12 @@ class Ui_MainWindow(object):
         
         if tr_or_wr=="True":
             self.radioButton_true.setChecked(True)
+            self.radioButton_false.setChecked(False)
+
         elif tr_or_wr=="False":
             self.radioButton_false.setChecked(True)
-            
+            self.radioButton_true.setChecked(False)
+
         #display the corresponding image
         self.put_image(ind=index)
         
@@ -1153,7 +1160,7 @@ class Ui_MainWindow(object):
         #adjust the radiobutton
         self.radioButton_true.setChecked(True)
         #if the current index is not the last index
-        if index<len(self.rtdc_ds["pos_x"]):
+        if index<len(self.rtdc_ds["events"]["pos_x"]):
             self.onIndexChange(index+1)
         
         
@@ -1168,17 +1175,17 @@ class Ui_MainWindow(object):
         self.tableWidget_decisions.setItem(index, 0, item)
         #adjust the radiobutton
         self.radioButton_false.setChecked(True)
-        if index<len(self.rtdc_ds["pos_x"]):
+        if index<len(self.rtdc_ds["events"]["pos_x"]):
             self.onIndexChange(index+1)
 
     def next_cell(self):
         index = int(self.spinBox_index.value())
-        if index<len(self.rtdc_ds["pos_x"]):
+        if index<len(self.rtdc_ds["events"]["pos_x"]):
             self.onIndexChange(index+1)
 
     def previous_cell(self):       
         index = int(self.spinBox_index.value())
-        if index<len(self.rtdc_ds["pos_x"]):
+        if index<len(self.rtdc_ds["events"]["pos_x"]):
             self.onIndexChange(index-1)
 
     def next_channel(self):
