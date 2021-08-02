@@ -174,8 +174,10 @@ def write_rtdc(fname,rtdc_path,indices,decisions):
     h5_targ.attrs["experiment:date"] = time.strftime("%Y-%m-%d")
     h5_targ.attrs["experiment:time"] = time.strftime("%H:%M:%S")
     h5_targ.attrs["imaging:pixel size"] = pixel_size
-    h5_targ.attrs["setup:identifier"] = h5_orig.attrs["setup:identifier"]
     h5_targ.attrs["experiment:original_file"] = rtdc_path
+    meta_keys = list(h5_orig.attrs.keys())
+    if "setup:identifier" in meta_keys:
+         h5_targ.attrs["setup:identifier"] = rtdc_path
 
 
     h5_targ.close()
