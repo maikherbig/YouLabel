@@ -29,7 +29,7 @@ except AttributeError:
     def _translate(context, text, disambig):
         return QtWidgets.QApplication.translate(context, text, disambig)
 
-VERSION = "0.2.0_dev2" #Python 3.7.10 Version
+VERSION = "0.2.1" #Python 3.7.10 Version
 print("YouLabel Version: "+VERSION)
 
 if sys.platform=="darwin":
@@ -170,18 +170,20 @@ def write_rtdc(fname,rtdc_path,indices,decisions):
     #Adjust metadata:
     #"experiment:event count" = Nr. of images
     h5_targ.attrs["experiment:event count"] = len(indices)
-    h5_targ.attrs["experiment:sample"] = rtdc_path
+    sample = os.path.basename(rtdc_path)
+    sample = os.path.splitext(sample)[0]
+    h5_targ.attrs["experiment:sample"] = sample
     h5_targ.attrs["experiment:date"] = time.strftime("%Y-%m-%d")
     h5_targ.attrs["experiment:time"] = time.strftime("%H:%M:%S")
     h5_targ.attrs["imaging:pixel size"] = pixel_size
-    h5_targ.attrs["experiment:original_file"] = rtdc_path
+    #h5_targ.attrs["experiment:original_file"] = rtdc_path
     meta_keys = list(h5_orig.attrs.keys())
     if "setup:identifier" in meta_keys:
          h5_targ.attrs["setup:identifier"] = rtdc_path
 
-
     h5_targ.close()
     h5_orig.close()
+
 
 def image_adjust_channels(images,channels_targ=1):
     """
@@ -984,7 +986,6 @@ class Ui_MainWindow(object):
             #channels = 1 #actually that case should not never exist as np.expand_dims was used before to get images in format (NHWC)
         elif len(img.shape)==3:
             height, width, channels = img.shape
-            print("Img.shape"+str(img.shape))
         else:
             print("Invalid image format: "+str(img.shape))
             return
@@ -1026,7 +1027,6 @@ class Ui_MainWindow(object):
         img_zoom =  cv2.resize(img, dsize=None,fx=factor, fy=factor, interpolation=cv2.INTER_LINEAR)
 
         img_zoom = np.ascontiguousarray(img_zoom)
-        print("Shape of zoomed image: "+str(img_zoom.shape))
         
         if color_mode=="Grayscale":
             self.label_showFullImage.setImage(img_zoom.T,autoRange=False)
