@@ -1,5 +1,5 @@
 # YouLabel
-GUI based software to view and label images of RT-DC datasets
+Software with GUI to view and label images of .rtdc datasets
 
 # Screenshot
 ![alt text](art/ScreenShot_v01.png "YouLabel Screenshot")  
