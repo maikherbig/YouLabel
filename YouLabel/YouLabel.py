@@ -1,11 +1,8 @@
 # -*- coding: utf-8 -*-
 
-# Form implementation generated from reading ui file 'MORE_ImageSelector_ui_001.ui'
-#
-# Created by: PyQt5 UI code generator 5.9.2
-#
-# WARNING! All changes made in this file will be lost!
-
+"""
+YouLabel: Software with GUI to view and label images of .rtdc datasets
+"""
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtWidgets, QtGui
 import os, sys
@@ -29,7 +26,7 @@ except AttributeError:
     def _translate(context, text, disambig):
         return QtWidgets.QApplication.translate(context, text, disambig)
 
-VERSION = "0.2.1" #Python 3.7.10 Version
+VERSION = "0.2.1_dev2" #Python 3.7.10 Version
 print("YouLabel Version: "+VERSION)
 
 if sys.platform=="darwin":
@@ -85,6 +82,25 @@ def store_trace(h5group, data, compression):
             dset.resize(oldsize + data[flt].shape[0], axis=0)
             dset[oldsize:] = data[flt]
 
+def load_rtdc(rtdc_path):
+    """
+    This function load .rtdc files using h5py and takes care of catching all
+    errors
+    """
+    try:
+        try:
+            #sometimes there occurs an error when opening hdf files,
+            #therefore try opening a second time in case of an error.
+            #This is very strange, and seems like a dirty solution,
+            #but I never saw it failing two times in a row
+            rtdc_ds = h5py.File(rtdc_path, 'r')
+        except:
+            rtdc_ds = h5py.File(rtdc_path, 'r')
+        return False,rtdc_ds #failed=False
+    except Exception as e:
+        #There is an issue loading the files!
+        return True,e
+
 
 def write_rtdc(fname,rtdc_path,indices,decisions):
     """
@@ -120,7 +136,7 @@ def write_rtdc(fname,rtdc_path,indices,decisions):
             values = np.array(range(len(indices)))+1
             h5_targ.create_dataset("events/"+key, data=values,dtype=values.dtype)
 
-        elif key == "index_orig":
+        elif key == "index_online":
             values = h5_orig["events"]["index"][indices]
             h5_targ.create_dataset("events/"+key, data=values,dtype=values.dtype)
 
@@ -877,36 +893,34 @@ class Ui_MainWindow(object):
         fileinfo = []
         for i in range(len(filenames)):
             rtdc_path = filenames[i]
-            try:
-                #sometimes there occurs an error when opening hdf files,
-                #therefore try this a second time in case of an error.
-                #This is very strange, and seems like an unsufficient/dirty solution,
-                #but I never saw it failing two times in a row
-                try:
-                    rtdc_ds = h5py.File(rtdc_path, 'r')
-                except:
-                    rtdc_ds = h5py.File(rtdc_path, 'r')
-                    
-                features = list(rtdc_ds["events"].keys())
-                #Make sure that there is "images", "pos_x" and "pos_y" available
-                if "image" in features and "pos_x" in features and "pos_y" in features:
-                    nr_images = rtdc_ds["events"]["image"].len()
-                    pix = rtdc_ds.attrs["imaging:pixel size"]
-                    fileinfo.append({"rtdc_ds":rtdc_ds,"rtdc_path":rtdc_path,"features":features,"nr_images":nr_images,"pix":pix})
-                else:
-                    missing = []
-                    for feat in ["image","pos_x","pos_y"]:
-                        if feat not in features:
-                            missing.append(feat)    
-                    msg = QtWidgets.QMessageBox()
-                    msg.setIcon(QtWidgets.QMessageBox.Information)       
-                    msg.setText("Essential feature(s) are missing in data-set")
-                    msg.setDetailedText("Data-set: "+rtdc_path+"\nis missing "+str(missing))
-                    msg.setWindowTitle("Missing essential features")
-                    msg.setStandardButtons(QtWidgets.QMessageBox.Ok)
-                    msg.exec_()                      
-            except:
-                pass
+            failed,rtdc_ds = load_rtdc(rtdc_path)
+            if failed:
+                msg = QtWidgets.QMessageBox()
+                msg.setIcon(QtWidgets.QMessageBox.Critical)       
+                msg.setText(str(rtdc_ds))
+                msg.setWindowTitle("Error occurred during loading file")
+                msg.setStandardButtons(QtWidgets.QMessageBox.Ok)
+                msg.exec_()
+                return
+                
+            features = list(rtdc_ds["events"].keys())
+            #Make sure that there is "images", "pos_x" and "pos_y" available
+            if "image" in features and "pos_x" in features and "pos_y" in features:
+                nr_images = rtdc_ds["events"]["image"].len()
+                pix = rtdc_ds.attrs["imaging:pixel size"]
+                fileinfo.append({"rtdc_ds":rtdc_ds,"rtdc_path":rtdc_path,"features":features,"nr_images":nr_images,"pix":pix})
+            else:
+                missing = []
+                for feat in ["image","pos_x","pos_y"]:
+                    if feat not in features:
+                        missing.append(feat)    
+                msg = QtWidgets.QMessageBox()
+                msg.setIcon(QtWidgets.QMessageBox.Information)       
+                msg.setText("Essential feature(s) are missing in data-set")
+                msg.setDetailedText("Data-set: "+rtdc_path+"\nis missing "+str(missing))
+                msg.setWindowTitle("Missing essential features")
+                msg.setStandardButtons(QtWidgets.QMessageBox.Ok)
+                msg.exec_()                      
         
         #Add the stuff to the combobox on Plot/Peak Tab
         url_list = [fileinfo[iterator]["rtdc_path"] for iterator in range(len(fileinfo))]
