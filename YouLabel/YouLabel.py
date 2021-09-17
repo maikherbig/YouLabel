@@ -11,6 +11,7 @@ rand_state = np.random.RandomState(13) #to get the same random number on diff. P
 import traceback
 import cv2
 import h5py,shutil,time
+import frontend
 
 try:
     _fromUtf8 = QtCore.QString.fromUtf8
@@ -26,7 +27,7 @@ except AttributeError:
     def _translate(context, text, disambig):
         return QtWidgets.QApplication.translate(context, text, disambig)
 
-VERSION = "0.2.1_dev2" #Python 3.7.10 Version
+VERSION = "0.2.2" #Python 3.7.10 Version
 print("YouLabel Version: "+VERSION)
 
 if sys.platform=="darwin":
@@ -36,25 +37,6 @@ else:
 
 dir_root = os.getcwd()
 
-def MyExceptionHook(etype, value, trace):
-    """
-    Handler for all unhandled exceptions.
- 
-    :param `etype`: the exception type (`SyntaxError`, `ZeroDivisionError`, etc...);
-    :type `etype`: `Exception`
-    :param string `value`: the exception error message;
-    :param string `trace`: the traceback header, if any (otherwise, it prints the
-     standard Python header: ``Traceback (most recent call last)``.
-    """
-    tmp = traceback.format_exception(etype, value, trace)
-    exception = "".join(tmp)
-    msg = QtWidgets.QMessageBox()
-    msg.setIcon(QtWidgets.QMessageBox.Information)       
-    msg.setText(exception)
-    msg.setWindowTitle("Error")
-    msg.setStandardButtons(QtWidgets.QMessageBox.Ok)
-    msg.exec_()
-    return
 
 def store_trace(h5group, data, compression):
     firstkey = sorted(list(data.keys()))[0]
@@ -137,7 +119,12 @@ def write_rtdc(fname,rtdc_path,indices,decisions):
             h5_targ.create_dataset("events/"+key, data=values,dtype=values.dtype)
 
         elif key == "index_online":
-            values = h5_orig["events"]["index"][indices]
+            if "index_online" in h5_orig["events"].keys():
+                values = h5_orig["events"]["index_online"][indices]
+            elif "index" in h5_orig["events"].keys():
+                values = h5_orig["events"]["index"][indices]
+            else:
+                break
             h5_targ.create_dataset("events/"+key, data=values,dtype=values.dtype)
 
         elif key == "label":
@@ -199,6 +186,7 @@ def write_rtdc(fname,rtdc_path,indices,decisions):
 
     h5_targ.close()
     h5_orig.close()
+    
 
 
 def image_adjust_channels(images,channels_targ=1):
@@ -454,430 +442,32 @@ def image_crop_pad_cv2(images,pos_x,pos_y,pix,final_h,final_w,padding_mode="cv2.
             
     return images
 
-
-class MyTable(QtWidgets.QTableWidget):
-    dropped = QtCore.pyqtSignal(list)
-#    clicked = QtCore.pyqtSignal()
-#    dclicked = QtCore.pyqtSignal()
-
-    def __init__(self,  rows, columns, parent):
-        super(MyTable, self).__init__(rows, columns, parent)
-        self.setAcceptDrops(True)
-        self.setDragEnabled(True)
-        #self.setDragDropMode(QtWidgets.QAbstractItemView.InternalMove)
-        self.drag_item = None
-        self.drag_row = None
-
-    def dragEnterEvent(self, event):
-        if event.mimeData().hasUrls:
-            event.accept()
-        else:
-            event.ignore()
-
-    def dragMoveEvent(self, event):
-        if event.mimeData().hasUrls:
-            event.setDropAction(QtCore.Qt.CopyAction)
-            event.accept()
-        else:
-            event.ignore()
-
-    def dropEvent(self, event):
-        #super(MyTable, self).dropEvent(event)
-        #print(self.drag_row, self.row(self.drag_item),self.drag_item)
-        self.drag_item = None
-        if event.mimeData().hasUrls:
-            event.setDropAction(QtCore.Qt.CopyAction)
-            event.accept()
-            links = []
-            for url in event.mimeData().urls():
-                links.append(str(url.toLocalFile()))
-            self.dropped.emit(links)
-
-        else:
-            event.ignore()       
-        
-    def startDrag(self, supportedActions):
-        super(MyTable, self).startDrag(supportedActions)
-        self.drag_item = self.currentItem()
-        self.drag_row = self.row(self.drag_item)
-
-class Ui_MainWindow(object):
-    def setupUi(self, MainWindow):
-        MainWindow.setObjectName("YouLabel_v"+VERSION)
-        MainWindow.resize(773, 652)
-        sys.excepthook = MyExceptionHook
-
-        self.centralwidget = QtWidgets.QWidget(MainWindow)
-        self.centralwidget.setObjectName("centralwidget")
-        self.gridLayout = QtWidgets.QGridLayout(self.centralwidget)
-        self.gridLayout.setObjectName("gridLayout")
-        self.tabWidget = QtWidgets.QTabWidget(self.centralwidget)
-        self.tabWidget.setObjectName("tabWidget")
-        self.LoadFiles = QtWidgets.QWidget()
-        self.LoadFiles.setObjectName("LoadFiles")
-        self.gridLayout_2 = QtWidgets.QGridLayout(self.LoadFiles)
-        self.gridLayout_2.setObjectName("gridLayout_2")
-        self.tableWidget_loadFiles = MyTable(0,9,self.LoadFiles)
-        self.tableWidget_loadFiles.setObjectName("tableWidget_loadFiles")
-        self.gridLayout_2.addWidget(self.tableWidget_loadFiles, 0, 0, 1, 1)
-        self.tabWidget.addTab(self.LoadFiles, "")
-        self.tab_work = QtWidgets.QWidget()
-        self.tab_work.setObjectName("tab_work")
-        self.gridLayout_5 = QtWidgets.QGridLayout(self.tab_work)
-        self.gridLayout_5.setObjectName("gridLayout_5")
-        self.verticalLayout = QtWidgets.QVBoxLayout()
-        self.verticalLayout.setObjectName("verticalLayout")
-        self.horizontalLayout = QtWidgets.QHBoxLayout()
-        self.horizontalLayout.setObjectName("horizontalLayout")
-        self.comboBox_selectFile = QtWidgets.QComboBox(self.tab_work)
-        self.comboBox_selectFile.setObjectName("comboBox_selectFile")
-        self.horizontalLayout.addWidget(self.comboBox_selectFile)
-        self.pushButton_start = QtWidgets.QPushButton(self.tab_work)
-        self.pushButton_start.setMinimumSize(QtCore.QSize(75, 28))
-        self.pushButton_start.setMaximumSize(QtCore.QSize(75, 28))
-        self.pushButton_start.setObjectName("pushButton_start")
-        self.horizontalLayout.addWidget(self.pushButton_start)
-        self.verticalLayout.addLayout(self.horizontalLayout)
-        self.splitter = QtWidgets.QSplitter(self.tab_work)
-        self.splitter.setOrientation(QtCore.Qt.Horizontal)
-        self.splitter.setObjectName("splitter")
-        
-        self.label_showFullImage = pg.ImageView(self.splitter)
-        self.label_showFullImage.setMinimumSize(QtCore.QSize(0, 200))
-        self.label_showFullImage.setMaximumSize(QtCore.QSize(9999999, 200))
-        self.label_showFullImage.ui.histogram.hide()
-        self.label_showFullImage.ui.roiBtn.hide()
-        self.label_showFullImage.ui.menuBtn.hide()
-
-        self.label_showFullImage.setObjectName("label_showFullImage")
-        self.label_showCroppedImage = pg.ImageView(self.splitter)
-        self.label_showCroppedImage.setMinimumSize(QtCore.QSize(0, 200))
-        self.label_showCroppedImage.setMaximumSize(QtCore.QSize(9999999, 200))
-        self.label_showCroppedImage.ui.histogram.hide()
-        self.label_showCroppedImage.ui.roiBtn.hide()
-        self.label_showCroppedImage.ui.menuBtn.hide()
-
-        
-        self.label_showCroppedImage.setObjectName("label_showCroppedImage")
-        self.verticalLayout.addWidget(self.splitter)
-        self.horizontalLayout_4 = QtWidgets.QHBoxLayout()
-        self.horizontalLayout_4.setObjectName("horizontalLayout_4")
-        self.horizontalSlider_channel = QtWidgets.QSlider(self.tab_work)
-        self.horizontalSlider_channel.setOrientation(QtCore.Qt.Horizontal)
-        self.horizontalSlider_channel.setObjectName("horizontalSlider_channel")
-        self.horizontalLayout_4.addWidget(self.horizontalSlider_channel)
-        self.horizontalSlider_index = QtWidgets.QSlider(self.tab_work)
-        self.horizontalSlider_index.setOrientation(QtCore.Qt.Horizontal)
-        self.horizontalSlider_index.setObjectName("horizontalSlider_index")
-        self.horizontalLayout_4.addWidget(self.horizontalSlider_index)
-        self.spinBox_index = QtWidgets.QSpinBox(self.tab_work)
-        self.spinBox_index.setMinimumSize(QtCore.QSize(91, 22))
-        self.spinBox_index.setMaximumSize(QtCore.QSize(91, 22))
-        self.spinBox_index.setObjectName("spinBox_index")
-        self.horizontalLayout_4.addWidget(self.spinBox_index)
-        self.horizontalLayout_3 = QtWidgets.QHBoxLayout()
-        self.horizontalLayout_3.setObjectName("horizontalLayout_3")
-        self.pushButton_true = QtWidgets.QPushButton(self.tab_work)
-        self.pushButton_true.setMinimumSize(QtCore.QSize(151, 28))
-        self.pushButton_true.setMaximumSize(QtCore.QSize(151, 28))
-        self.pushButton_true.setObjectName("pushButton_true")
-        self.horizontalLayout_3.addWidget(self.pushButton_true)      
-
-        self.horizontalLayout_2 = QtWidgets.QHBoxLayout()
-        self.horizontalLayout_2.setObjectName("horizontalLayout_2")
-        self.radioButton_true = QtWidgets.QRadioButton(self.tab_work)
-        self.radioButton_true.setMinimumSize(QtCore.QSize(21, 20))
-        self.radioButton_true.setMaximumSize(QtCore.QSize(21, 20))
-        self.radioButton_true.setText("")
-        self.radioButton_true.setEnabled(False)
-        
-        self.radioButton_true.setObjectName("radioButton_true")
-        self.horizontalLayout_2.addWidget(self.radioButton_true)
-        self.radioButton_false = QtWidgets.QRadioButton(self.tab_work)
-        self.radioButton_false.setMinimumSize(QtCore.QSize(21, 20))
-        self.radioButton_false.setMaximumSize(QtCore.QSize(21, 20))
-        self.radioButton_false.setText("")
-        self.radioButton_false.setEnabled(False)
-        self.radioButton_false.setObjectName("radioButton_false")
-        self.horizontalLayout_2.addWidget(self.radioButton_false)
-        self.horizontalLayout_3.addLayout(self.horizontalLayout_2)
-
-        self.pushButton_false = QtWidgets.QPushButton(self.tab_work)
-        self.pushButton_false.setMinimumSize(QtCore.QSize(151, 28))
-        self.pushButton_false.setMaximumSize(QtCore.QSize(151, 28))
-        self.pushButton_false.setObjectName("pushButton_false")
-        self.horizontalLayout_3.addWidget(self.pushButton_false)
+def clip_contrast(img,low,high,auto=False):
+    if auto==True:
+        low,high = np.min(img),np.max(img)
+    # limit_lower = limits[0]
+    # limit_upper = limits[1]
+    img[:,:] = np.clip(img[:,:],a_min=low,a_max=high)
+    mini,maxi = np.min(img[:,:]),np.max(img[:,:])/255
+    img[:,:] = (img[:,:]-mini)/maxi
+    return img
 
 
+class MyPopup(QtWidgets.QWidget):
+    def __init__(self):
+        QtWidgets.QWidget.__init__(self)
 
 
+class MainWindow(QtWidgets.QMainWindow):
+    def __init__(self, *args, **kwargs):
+        super(MainWindow, self).__init__(*args, **kwargs)
+        self.setupUi()
 
-
-        self.horizontalLayout_4.addLayout(self.horizontalLayout_3)
-        self.verticalLayout.addLayout(self.horizontalLayout_4)
-        self.gridLayout_5.addLayout(self.verticalLayout, 0, 0, 1, 2)
-        self.groupBox_decisions = QtWidgets.QGroupBox(self.tab_work)
-        self.groupBox_decisions.setObjectName("groupBox_decisions")
-        self.gridLayout_4 = QtWidgets.QGridLayout(self.groupBox_decisions)
-        self.gridLayout_4.setObjectName("gridLayout_4")
-        self.tableWidget_decisions = QtWidgets.QTableWidget(self.groupBox_decisions)
-        self.tableWidget_decisions.setObjectName("tableWidget_decisions")
-        self.tableWidget_decisions.setColumnCount(0)
-        self.tableWidget_decisions.setRowCount(0)
-        self.gridLayout_4.addWidget(self.tableWidget_decisions, 0, 0, 1, 1)
-        
-        
-        
-        
-        self.verticalLayout_4 = QtWidgets.QVBoxLayout()
-        self.verticalLayout_4.setObjectName("verticalLayout_4")
-        self.groupBox_imgProc = QtWidgets.QGroupBox(self.groupBox_decisions)
-        self.groupBox_imgProc.setObjectName("groupBox_imgProc")
-        self.gridLayout_49 = QtWidgets.QGridLayout(self.groupBox_imgProc)
-        self.gridLayout_49.setObjectName("gridLayout_49")
-        self.comboBox_GrayOrRGB = QtWidgets.QComboBox(self.groupBox_imgProc)
-        self.comboBox_GrayOrRGB.setObjectName("comboBox_GrayOrRGB")
-        self.comboBox_GrayOrRGB.addItem("")
-        self.comboBox_GrayOrRGB.addItem("")
-
-        self.gridLayout_49.addWidget(self.comboBox_GrayOrRGB, 1, 4, 1, 1)
-        self.horizontalLayout_crop = QtWidgets.QHBoxLayout()
-        self.horizontalLayout_crop.setObjectName("horizontalLayout_crop")
-        self.label_CropIcon_2 = QtWidgets.QLabel(self.groupBox_imgProc)
-        self.label_CropIcon_2.setText("")
-        
-        self.label_CropIcon_2.setPixmap(QtGui.QPixmap(os.path.join(dir_root,"art","cropping.png")))
-        self.label_CropIcon_2.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
-        self.label_CropIcon_2.setObjectName("label_CropIcon_2")
-        self.horizontalLayout_crop.addWidget(self.label_CropIcon_2)
-        self.label_Crop = QtWidgets.QLabel(self.groupBox_imgProc)
-        self.label_Crop.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
-        self.label_Crop.setObjectName("label_Crop")
-        self.horizontalLayout_crop.addWidget(self.label_Crop)
-        self.gridLayout_49.addLayout(self.horizontalLayout_crop, 0, 0, 1, 1)
-        self.horizontalLayout_colorMode = QtWidgets.QHBoxLayout()
-        self.horizontalLayout_colorMode.setObjectName("horizontalLayout_colorMode")
-        self.label_colorModeIcon = QtWidgets.QLabel(self.groupBox_imgProc)
-        self.label_colorModeIcon.setText("")
-        self.label_colorModeIcon.setPixmap(QtGui.QPixmap(os.path.join(dir_root,"art","color_mode.png")))
-        self.label_colorModeIcon.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
-        self.label_colorModeIcon.setObjectName("label_colorModeIcon")
-        self.horizontalLayout_colorMode.addWidget(self.label_colorModeIcon)
-        self.label_colorMode = QtWidgets.QLabel(self.groupBox_imgProc)
-        self.label_colorMode.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
-        self.label_colorMode.setObjectName("label_colorMode")
-        self.horizontalLayout_colorMode.addWidget(self.label_colorMode)
-        self.gridLayout_49.addLayout(self.horizontalLayout_colorMode, 1, 3, 1, 1)
-        self.horizontalLayout_nrEpochs = QtWidgets.QHBoxLayout()
-        self.horizontalLayout_nrEpochs.setObjectName("horizontalLayout_nrEpochs")
-        self.label_padIcon = QtWidgets.QLabel(self.groupBox_imgProc)
-        self.label_padIcon.setText("")
-        self.label_padIcon.setPixmap(QtGui.QPixmap(os.path.join(dir_root,"art","padding.png")))
-        self.label_padIcon.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
-        self.label_padIcon.setObjectName("label_padIcon")
-        self.horizontalLayout_nrEpochs.addWidget(self.label_padIcon)
-        self.label_paddingMode = QtWidgets.QLabel(self.groupBox_imgProc)
-        self.label_paddingMode.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
-        self.label_paddingMode.setObjectName("label_paddingMode")
-        self.horizontalLayout_nrEpochs.addWidget(self.label_paddingMode)
-        self.gridLayout_49.addLayout(self.horizontalLayout_nrEpochs, 1, 0, 1, 1)
-        self.comboBox_BgRemove = QtWidgets.QComboBox(self.groupBox_imgProc)
-        self.comboBox_BgRemove.setMinimumSize(QtCore.QSize(200, 0))
-        self.comboBox_BgRemove.setObjectName("comboBox_BgRemove")
-        self.comboBox_BgRemove.addItem("")
-        self.comboBox_BgRemove.addItem("")
-
-        self.gridLayout_49.addWidget(self.comboBox_BgRemove, 0, 4, 1, 1)
-        self.spinBox_cropsize = QtWidgets.QSpinBox(self.groupBox_imgProc)
-        self.spinBox_cropsize.setMinimum(1)
-        self.spinBox_cropsize.setMaximum(999999)
-        self.spinBox_cropsize.setProperty("value", 64)
-        self.spinBox_cropsize.setObjectName("spinBox_cropsize")
-        self.gridLayout_49.addWidget(self.spinBox_cropsize, 0, 1, 1, 1)
-        self.comboBox_paddingMode = QtWidgets.QComboBox(self.groupBox_imgProc)
-        self.comboBox_paddingMode.setEnabled(True)
-        self.comboBox_paddingMode.setObjectName("comboBox_paddingMode")
-        self.comboBox_paddingMode.addItem("")
-        self.comboBox_paddingMode.addItem("")
-        self.comboBox_paddingMode.addItem("")
-        self.comboBox_paddingMode.addItem("")
-        self.comboBox_paddingMode.addItem("")
-        self.comboBox_paddingMode.addItem("")
-        self.gridLayout_49.addWidget(self.comboBox_paddingMode, 1, 1, 1, 1)
-        self.horizontalLayout_normalization = QtWidgets.QHBoxLayout()
-        self.horizontalLayout_normalization.setObjectName("horizontalLayout_normalization")
-        self.label_NormalizationIcon = QtWidgets.QLabel(self.groupBox_imgProc)
-        self.label_NormalizationIcon.setText("")
-        self.label_NormalizationIcon.setPixmap(QtGui.QPixmap(os.path.join(dir_root,"art","normalzation.png")))
-        self.label_NormalizationIcon.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
-        self.label_NormalizationIcon.setObjectName("label_NormalizationIcon")
-        self.horizontalLayout_normalization.addWidget(self.label_NormalizationIcon)
-        self.label_Normalization = QtWidgets.QLabel(self.groupBox_imgProc)
-        self.label_Normalization.setLayoutDirection(QtCore.Qt.LeftToRight)
-        self.label_Normalization.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
-        self.label_Normalization.setObjectName("label_Normalization")
-        self.horizontalLayout_normalization.addWidget(self.label_Normalization)
-        self.gridLayout_49.addLayout(self.horizontalLayout_normalization, 0, 3, 1, 1)
-        self.verticalLayout_4.addWidget(self.groupBox_imgProc)
-        
-        self.groupBox_saving = QtWidgets.QGroupBox(self.groupBox_decisions)
-        self.groupBox_saving.setObjectName("groupBox_saving")
-        self.gridLayout_3 = QtWidgets.QGridLayout(self.groupBox_saving)
-        self.gridLayout_3.setObjectName("gridLayout_3")
-        self.verticalLayout_2 = QtWidgets.QVBoxLayout()
-        self.verticalLayout_2.setObjectName("verticalLayout_2")
-        self.pushButton_saveTrueAs = QtWidgets.QPushButton(self.groupBox_saving)
-        self.pushButton_saveTrueAs.setObjectName("pushButton_saveTrueAs")
-        self.verticalLayout_2.addWidget(self.pushButton_saveTrueAs)
-        self.lineEdit_TrueFname = QtWidgets.QLineEdit(self.groupBox_saving)
-        self.lineEdit_TrueFname.setObjectName("lineEdit_TrueFname")
-        self.verticalLayout_2.addWidget(self.lineEdit_TrueFname)
-        self.gridLayout_3.addLayout(self.verticalLayout_2, 0, 0, 1, 1)
-        self.verticalLayout_3 = QtWidgets.QVBoxLayout()
-        self.verticalLayout_3.setObjectName("verticalLayout_3")
-        self.pushButton_saveFalseAs = QtWidgets.QPushButton(self.groupBox_saving)
-        self.pushButton_saveFalseAs.setObjectName("pushButton_saveFalseAs")
-        self.verticalLayout_3.addWidget(self.pushButton_saveFalseAs)
-        self.lineEdit_FalseFname = QtWidgets.QLineEdit(self.groupBox_saving)
-        self.lineEdit_FalseFname.setObjectName("lineEdit_FalseFname")
-        self.verticalLayout_3.addWidget(self.lineEdit_FalseFname)
-        self.gridLayout_3.addLayout(self.verticalLayout_3, 1, 0, 1, 1)
-        self.verticalLayout_4.addWidget(self.groupBox_saving)
-        self.gridLayout_4.addLayout(self.verticalLayout_4, 0, 1, 1, 1)
-        self.gridLayout_5.addWidget(self.groupBox_decisions, 1, 0, 1, 1)
-        self.tabWidget.addTab(self.tab_work, "")
-        self.gridLayout.addWidget(self.tabWidget, 0, 0, 1, 1)
-        MainWindow.setCentralWidget(self.centralwidget)
-        self.menubar = QtWidgets.QMenuBar(MainWindow)
-        self.menubar.setGeometry(QtCore.QRect(0, 0, 1082, 25))
-        self.menubar.setObjectName("menubar")
-        MainWindow.setMenuBar(self.menubar)
-        self.statusbar = QtWidgets.QStatusBar(MainWindow)
-        self.statusbar.setObjectName("statusbar")
-        MainWindow.setStatusBar(self.statusbar)
-        
-        
-        
-        
-        
-
-        self.retranslateUi(MainWindow)
-        self.tabWidget.setCurrentIndex(0)
-        QtCore.QMetaObject.connectSlotsByName(MainWindow)
-
-
-
-        ##########################Manual changes###############################
-        #######################################################################
-        self.tableWidget_loadFiles.setObjectName(_fromUtf8("tableWidget_loadFiles"))
-        header_labels = ["File", "Index" ,"T", "V", "Show","Features","Cells total","Cells/Epoch","PIX"]
-        self.tableWidget_loadFiles.setHorizontalHeaderLabels(header_labels) 
-        header = self.tableWidget_loadFiles.horizontalHeader()
-        for i in [1,2,3,4,5,6,7,8]:#range(len(header_labels)):
-            header.setResizeMode(i, QtWidgets.QHeaderView.ResizeToContents)        
-        self.tableWidget_loadFiles.setAcceptDrops(True)
-        self.tableWidget_loadFiles.setDragEnabled(True)
-        self.tableWidget_loadFiles.dropped.connect(self.dataDropped)
-        self.tableWidget_loadFiles.resizeRowsToContents()
-
-        self.pushButton_start.clicked.connect(self.start_analysis)
-        self.shortcut_true = QtGui.QShortcut(QtGui.QKeySequence("T"), self.tabWidget)
-        self.shortcut_true.activated.connect(self.true_cell)
-        self.shortcut_false = QtGui.QShortcut(QtGui.QKeySequence("F"), self.tabWidget)
-        self.shortcut_false.activated.connect(self.false_cell)
-        self.shortcut_channel = QtGui.QShortcut(QtGui.QKeySequence("C"), self.tabWidget)
-        self.shortcut_channel.activated.connect(self.next_channel)
-
-        self.pushButton_true.clicked.connect(self.true_cell)
-        self.pushButton_false.clicked.connect(self.false_cell)
-
-        self.shortcut_next = QtGui.QShortcut(QtGui.QKeySequence("Right"), self.tabWidget)
-        self.shortcut_next.activated.connect(self.next_cell)
-        self.shortcut_next = QtGui.QShortcut(QtGui.QKeySequence("Left"), self.tabWidget)
-        self.shortcut_next.activated.connect(self.previous_cell)
-
-        self.horizontalSlider_index.valueChanged.connect(self.onIndexChange)
-        self.spinBox_index.valueChanged.connect(self.onIndexChange)
-        self.spinBox_cropsize.valueChanged.connect(lambda ind: self.put_image(self.spinBox_index.value()))
-        self.comboBox_paddingMode.currentIndexChanged.connect(lambda ind: self.put_image(self.spinBox_index.value()))
-        self.comboBox_BgRemove.currentIndexChanged.connect(lambda ind: self.put_image(self.spinBox_index.value()))
-        self.horizontalSlider_channel.valueChanged.connect(lambda ind: self.put_image(self.spinBox_index.value()))
-        self.comboBox_GrayOrRGB.currentIndexChanged.connect(lambda ind: self.put_image(self.spinBox_index.value()))
-        
-        self.lineEdit_TrueFname.setText("True.rtdc")
-        self.lineEdit_FalseFname.setText("False.rtdc")
-        self.pushButton_saveTrueAs.clicked.connect(self.save_true_events)
-        self.pushButton_saveFalseAs.clicked.connect(self.save_false_events)
-        self.comboBox_selectFile.currentIndexChanged.connect(self.start_analysis)
-        ############################Variables##################################
-        #######################################################################
-        #Initilaize some variables which are lateron filled in the program
-        self.colors = 10*["g","m","b","c"]
-        #self.colors = QtGui.QColor.colorNames() #returns a list of all available colors
-        self.colors2 = 10*['blue','red','magenta','cyan','green','black','grey','orange','yellow','cornflowerblue','chocolate','lime','tomato','gold','purple']    #Some colors which are later used for different subpopulations
-        self.ram = dict() #Variable to store data if Option "Data to RAM is enabled"
-        #######################################################################
-        #######################################################################
-
-
-
-
-
-
-    def retranslateUi(self, MainWindow):
-        _translate = QtCore.QCoreApplication.translate
-        MainWindow.setWindowTitle(_translate("MainWindow", "YouLabel_v"+VERSION))
-        self.tabWidget.setTabText(self.tabWidget.indexOf(self.LoadFiles), _translate("MainWindow", "Load Files"))
-        self.pushButton_start.setText(_translate("MainWindow", "Start"))
-        self.pushButton_true.setText(_translate("MainWindow", "TRUE!"))
-        self.pushButton_true.setToolTip(_translate("MainWindow", "Shortcut: T"))
-        self.pushButton_false.setText(_translate("MainWindow", "FALSE!"))
-        self.pushButton_false.setToolTip(_translate("MainWindow", "Shortcut: F"))
-        self.horizontalSlider_index.setToolTip(_translate("MainWindow", "Shortcut: Left/Right arrow"))
-        self.horizontalSlider_channel.setToolTip(_translate("MainWindow", "Shortcut: C"))
-
-        self.groupBox_decisions.setTitle(_translate("MainWindow", "Decisions"))
-        self.groupBox_imgProc.setTitle(_translate("MainWindow", "Image processing"))
-        self.label_Crop.setToolTip(_translate("MainWindow", "Define size of the cropped image (right)."))
-        self.label_Crop.setText(_translate("MainWindow", "Cropping size"))
-        self.label_colorMode.setText(_translate("MainWindow", "Color Mode"))
-        self.label_paddingMode.setText(_translate("MainWindow", "Padding mode"))
-        self.comboBox_paddingMode.setToolTip(_translate("MainWindow", "By default, the padding mode is \"constant\", which means that zeros are padded.\n"
-"\"edge\": Pads with the edge values of array.\n"
-"\"linear_ramp\": Pads with the linear ramp between end_value and the array edge value.\n"
-"\"maximum\": Pads with the maximum value of all or part of the vector along each axis.\n"
-"\"mean\": Pads with the mean value of all or part of the vector along each axis.\n"
-"\"median\": Pads with the median value of all or part of the vector along each axis.\n"
-"\"minimum\": Pads with the minimum value of all or part of the vector along each axis.\n"
-"\"reflect\": Pads with the reflection of the vector mirrored on the first and last values of the vector along each axis.\n"
-"\"symmetric\": Pads with the reflection of the vector mirrored along the edge of the array.\n"
-"\"wrap\": Pads with the wrap of the vector along the axis. The first values are used to pad the end and the end values are used to pad the beginning.\n"
-"Text copied from https://docs.scipy.org/doc/numpy/reference/generated/numpy.pad.html"))
-        self.comboBox_paddingMode.setItemText(0, _translate("MainWindow", "constant"))
-        self.comboBox_paddingMode.setItemText(1, _translate("MainWindow", "edge"))
-        self.comboBox_paddingMode.setItemText(2, _translate("MainWindow", "reflect"))
-        self.comboBox_paddingMode.setItemText(3, _translate("MainWindow", "symmetric"))
-        self.comboBox_paddingMode.setItemText(4, _translate("MainWindow", "wrap"))
-        self.comboBox_paddingMode.setItemText(5, _translate("MainWindow", "alternate"))
-
-        self.comboBox_GrayOrRGB.setItemText(0, _translate("MainWindow", "Grayscale"))
-        self.comboBox_GrayOrRGB.setItemText(1, _translate("MainWindow", "RGB"))
-
-        self.comboBox_BgRemove.setItemText(0, _translate("MainWindow", "None"))
-        self.comboBox_BgRemove.setItemText(1, _translate("MainWindow", "vstripes_removal"))
-       
-        self.label_Normalization.setToolTip(_translate("MainWindow", "Define, if a particular backgound removal algorithm should be applied (chnages only the appearance of the displayed image. Has no effect during saving (original images are saved)"))
-        self.label_Normalization.setText(_translate("MainWindow", "Background removal"))
-        self.groupBox_saving.setTitle(_translate("MainWindow", "Saving"))
-        self.pushButton_saveTrueAs.setText(_translate("MainWindow", "Save TRUE cells as..."))
-        self.pushButton_saveTrueAs.setToolTip(_translate("MainWindow", "File is saved into same directory as original file."))
-        self.pushButton_saveFalseAs.setText(_translate("MainWindow", "Save FALSE cells as..."))
-        self.pushButton_saveFalseAs.setToolTip(_translate("MainWindow", "File is saved into same directory as original file."))
-
-        self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_work), _translate("MainWindow", "Label Images"))
-
-
-
+    def setupUi(self):
+        frontend.setup_main_ui(self)
+    
+    def retranslateUi(self):
+        frontend.retranslate_main_ui(self,VERSION)
 
     def dataDropped(self, l):
         #If there is data stored on ram tell user that RAM needs to be refreshed!
@@ -992,43 +582,97 @@ class Ui_MainWindow(object):
             item.setData(QtCore.Qt.EditRole,pix)
             self.tableWidget_loadFiles.setItem(rowPosition, columnPosition, item)
 
+        
+
     def put_image(self,ind):
+        #Function puts new image on the screen
+        
+        #Only perform after each 30ms (faster is useless)
+        if time.time() - self.time_show_img<0.03:
+            return #return if less than 30ms time difference
+        
+        self.time_show_img = time.time() #update time-tag
+
+        if ind==None:
+            ind = int(self.spinBox_index.value())
         img = self.Images[ind]
-        if len(img.shape)==2:
+        
+        if len(img.shape)==2: #actually, that case should never occur as np.expand_dims was used before to get images in format (NHWC)
             print("Invalid image shape "+str(img.shape))
             return
-            #channels = 1 #actually that case should not never exist as np.expand_dims was used before to get images in format (NHWC)
+            #channels = 1 
         elif len(img.shape)==3:
             height, width, channels = img.shape
         else:
             print("Invalid image format: "+str(img.shape))
             return
 
-        channel_targ = int(self.horizontalSlider_channel.value())
+        #Retrieve the setting from self.popup_layercontrols_ui
+        ui_item = self.popup_layercontrols_ui
+        layer_names = [obj.text() for obj in ui_item.label_layername_chX]
+        layer_active = [obj.isChecked() for obj in ui_item.checkBox_show_chX]
+        layer_range = [obj.getRange() for obj in ui_item.horizontalSlider_chX]
+        layer_auto = [obj.isChecked() for obj in ui_item.checkBox_auto_chX]
+        layer_cmap = [obj.currentText() for obj in ui_item.comboBox_cmap_chX]
+
+        #Assemble the image according to the settings in self.popup_layercontrols_ui
+        #Find activated layers for each color:
+        ind_active_r,ind_active_g,ind_active_b = [],[],[]
+        for ch in range(len(layer_cmap)):
+        #for color,active in zip(layer_cmap,layer_active):
+            if layer_cmap[ch]=="Red" and layer_active[ch]==True:
+                ind_active_r.append(ch)
+            if layer_cmap[ch]=="Green" and layer_active[ch]==True:
+                ind_active_g.append(ch)
+            if layer_cmap[ch]=="Blue" and layer_active[ch]==True:
+                ind_active_b.append(ch)
+        
+        if len(ind_active_r)>0:
+            img_ch = img[:,:,np.array(ind_active_r)]
+            layer_range_ch = np.array(layer_range)[np.array(ind_active_r)] #Range of all red channels 
+            layer_auto_ch = np.array(layer_auto)[np.array(ind_active_r)] #Automatic range
+            #Scale each red channel according to layer_range
+            for layer in range(img_ch.shape[-1]):
+                limits,auto = layer_range_ch[layer],layer_auto_ch[layer]
+                img_ch[:,:,layer] = clip_contrast(img=img_ch[:,:,layer],low=limits[0],high=limits[1],auto=auto)
+            img_r = np.mean(img_ch,axis=-1).astype(np.uint8)
+        else:
+            img_r = np.zeros(shape=(img.shape[0],img.shape[1]),dtype=np.uint8)
+            
+        if len(ind_active_g)>0:
+            img_ch = img[:,:,np.array(ind_active_g)]
+            layer_range_ch = np.array(layer_range)[np.array(ind_active_g)] #Range of all red channels 
+            layer_auto_ch = np.array(layer_auto)[np.array(ind_active_g)] #Automatic range
+            #Scale each red channel according to layer_range
+            for layer in range(img_ch.shape[-1]):
+                limits,auto = layer_range_ch[layer],layer_auto_ch[layer]
+                img_ch[:,:,layer] = clip_contrast(img=img_ch[:,:,layer],low=limits[0],high=limits[1],auto=auto)
+            img_g = np.mean(img_ch,axis=-1).astype(np.uint8)
+        else:
+            img_g = np.zeros(shape=(img.shape[0],img.shape[1]),dtype=np.uint8)
+
+        if len(ind_active_b)>0:
+            img_ch = img[:,:,np.array(ind_active_b)]
+            layer_range_ch = np.array(layer_range)[np.array(ind_active_b)] #Range of all red channels 
+            layer_auto_ch = np.array(layer_auto)[np.array(ind_active_b)] #Automatic range
+            #Scale each red channel according to layer_range
+            for layer in range(img_ch.shape[-1]):
+                limits,auto = layer_range_ch[layer],layer_auto_ch[layer]
+                img_ch[:,:,layer] = clip_contrast(img=img_ch[:,:,layer],low=limits[0],high=limits[1],auto=auto)
+            img_b = np.mean(img_ch,axis=-1).astype(np.uint8)
+        else:
+            img_b = np.zeros(shape=(img.shape[0],img.shape[1]),dtype=np.uint8)
+        
+        #Assemble image by stacking all layers
+        img = np.stack([img_r,img_g,img_b],axis=-1)
+
+        # channel_targ = 0#int(self.horizontalSlider_channel.value())
         color_mode = str(self.comboBox_GrayOrRGB.currentText())
-        if channel_targ<img.shape[-1]:
-            img = img[:,:,channel_targ] #select single channel which is displayed
-
-        #if the slider is on the very right: create superposition of all channels
-        elif channel_targ>=img.shape[-1]:
-            if color_mode=="Grayscale":
-                #if Color_Mode is grayscale, convert RGB to grayscale
-                #simply by taking the mean across all channels
-                img = np.mean(img,axis=-1).astype(np.uint8)
-            elif color_mode=="RGB":
-                if channels==1:
-                    #there is just one channel provided, but for displyaing, 
-                    #3 channels are needed: add two zero-channels
-                    zeros = np.zeros(img.shape[:2]+(1,))
-                    img = np.c_[img,zeros,zeros]
-                    print("Added 2nd and 3rd channel: "+str(img.shape))
-
-                elif channels==2:
-                    #there are just two channel provided, but for displyaing, 
-                    #3 channels are needed add one zero-channel
-                    zeros = np.zeros(img.shape[:2]+(1,))
-                    img = np.c_[img,zeros]
-                    print("Added 3rd channel: "+str(img.shape))
+        
+        if color_mode=="Grayscale":
+            #if Color_Mode is grayscale, convert RGB to grayscale
+            #simply by taking the mean across all channels
+            img = np.mean(img,axis=-1).astype(np.uint8)
 
         #Background removal:
         if str(self.comboBox_BgRemove.currentText())=="":
@@ -1083,17 +727,12 @@ class Ui_MainWindow(object):
         rtdc_path = str(self.comboBox_selectFile.currentText())
         print(rtdc_path)
         #get the rtdc_ds
-        #sometimes there occurs an error when opening hdf files,
-        #therefore try this a second time in case of an error.
-        #This is very strange, and seems like an unsufficient/dirty solution,
-        #but I never saw it failing two times in a row
-        try:
-            rtdc_ds = h5py.File(rtdc_path, 'r')
-        except:
-            rtdc_ds = h5py.File(rtdc_path, 'r')
-        
+        failed,rtdc_ds = load_rtdc(rtdc_path)        
         self.rtdc_ds = rtdc_ds
         
+        self.layercontrols_show_nr = 0
+        self.time_show_img = time.time()
+
         #Load the first image and show on label_showFullImage and label_showCroppedImage
         image_shape = rtdc_ds["events"]["image"].shape
         nr_images = image_shape[0]
@@ -1102,22 +741,30 @@ class Ui_MainWindow(object):
         #Set both to zero
         self.spinBox_index.setValue(0)
         self.horizontalSlider_index.setValue(0)
-        
-        
-        #check if there other channels available
-        h5 = h5py.File(rtdc_path, 'r')
-        keys = list(h5["events"].keys())
-        ind_ch = np.array(["image_ch" in key for key in keys])
-        channels = np.sum(ind_ch) #1+ is because there is always at least one channel (rtdc_ds["image"])
-        ind_ch = np.where(ind_ch==True)[0]
-        keys_ch = list(np.array(keys)[ind_ch])
+                
+        #check which channels are available
+        keys = list(rtdc_ds["events"].keys())
+        #find keys of image_channels
+        keys_image = []
+        for key in keys:
+            shape = rtdc_ds["events"][key].shape
+            if len(shape)==3: #images have special shape (2D arrays)
+                keys_image.append(key)
+        #Sort keys_image: "image" first; "mask" last 
+        keys_image.insert(0, keys_image.pop(keys_image.index("image")))
+        keys_image.insert(len(keys_image), keys_image.pop(keys_image.index("mask")))
+
+        #initialize a layer-options-popup-window
+        self.init_layercontrols(keys_image)
+
+        channels = len(keys_image)
         #Set the slider such that every channel can be selected
-        self.horizontalSlider_channel.setRange(0,channels+1) #add one more dimension for a "blending"/superposition channel
+        #self.horizontalSlider_channel.setRange(0,channels+1) #add one more dimension for a "blending"/superposition channel
         #Define variable on self that carries all image information
         if channels==0:
             self.Images = np.expand_dims(rtdc_ds["events"]["image"][:],-1)
         elif channels>0:
-            self.Images = np.stack( [rtdc_ds["events"]["image"][:]] + [h5["events"][key][:] for key in keys_ch] ,axis=-1)            
+            self.Images = np.stack( [rtdc_ds["events"][key][:] for key in keys_image] ,axis=-1)            
 
         self.put_image(ind=0)
         
@@ -1134,11 +781,11 @@ class Ui_MainWindow(object):
         
         for row in range(nr_images):
             item = QtWidgets.QTableWidgetItem()
-            item.setData(QtCore.Qt.DisplayRole, "True")
+            item.setData(QtCore.Qt.DisplayRole, "0")
             item.setFlags(item.flags() &~QtCore.Qt.ItemIsEnabled &~ QtCore.Qt.ItemIsSelectable )
             self.tableWidget_decisions.setItem(row, 0, item)
 
-        self.radioButton_true.setChecked(True)
+        #self.radioButton_true.setChecked(True)
 
 
         
@@ -1151,84 +798,82 @@ class Ui_MainWindow(object):
         #Read from tableWidget_decisions if True or Wrong
         tr_or_wr = self.tableWidget_decisions.item(index, 0).text() 
         
-        if tr_or_wr=="True":
-            self.radioButton_true.setChecked(True)
-            self.radioButton_false.setChecked(False)
-
-        elif tr_or_wr=="False":
-            self.radioButton_false.setChecked(True)
-            self.radioButton_true.setChecked(False)
-
+        if index%25==0:
+            self.fill_class_combobox()
+        
         #display the corresponding image
         self.put_image(ind=index)
         
         
     def true_cell(self):
-        print("True")
         #Current index
         index = int(self.spinBox_index.value())
-        #When true is hit, change this row in the table
+        #When false is triggered, change this row in the table
         item = QtWidgets.QTableWidgetItem()
-        item.setData(QtCore.Qt.DisplayRole, "True")
+        item.setData(QtCore.Qt.DisplayRole, "1")
         item.setFlags(item.flags() &~QtCore.Qt.ItemIsEnabled &~ QtCore.Qt.ItemIsSelectable )
         self.tableWidget_decisions.setItem(index, 0, item)
-        
-        #adjust the radiobutton
-        self.radioButton_true.setChecked(True)
-        #if the current index is not the last index
         if index<len(self.rtdc_ds["events"]["pos_x"]):
             self.onIndexChange(index+1)
         
-        
     def false_cell(self):
-        print("False")
         #Current index
         index = int(self.spinBox_index.value())
-        #When true is hit, change this row in the table
+        #When false is triggered, change this row in the table
         item = QtWidgets.QTableWidgetItem()
-        item.setData(QtCore.Qt.DisplayRole, "False")
+        item.setData(QtCore.Qt.DisplayRole, "0")
         item.setFlags(item.flags() &~QtCore.Qt.ItemIsEnabled &~ QtCore.Qt.ItemIsSelectable )
         self.tableWidget_decisions.setItem(index, 0, item)
-        #adjust the radiobutton
-        self.radioButton_false.setChecked(True)
         if index<len(self.rtdc_ds["events"]["pos_x"]):
             self.onIndexChange(index+1)
 
+
+    def keyPressEvent(self, event):
+        numbers = [QtCore.Qt.Key_0,QtCore.Qt.Key_1,QtCore.Qt.Key_2,QtCore.Qt.Key_3,\
+        QtCore.Qt.Key_4,QtCore.Qt.Key_5,QtCore.Qt.Key_6,QtCore.Qt.Key_7,QtCore.Qt.Key_8,\
+        QtCore.Qt.Key_9]
+        ind = np.where(np.array(numbers)==event.key())[0]
+        if len(ind)==1:
+            self.number_pressed(ind[0])
+
+    def number_pressed(self,value):
+        #Current index
+        index = int(self.spinBox_index.value())
+        #When true is hit, change this row in the table
+        item = QtWidgets.QTableWidgetItem()
+        item.setData(QtCore.Qt.DisplayRole, str(value))
+        item.setFlags(item.flags() &~QtCore.Qt.ItemIsEnabled &~ QtCore.Qt.ItemIsSelectable )
+        self.tableWidget_decisions.setItem(index, 0, item)
+        
+        #got to the next cell, if the current index is not the last index
+        if index<len(self.rtdc_ds["events"]["pos_x"]):
+            self.onIndexChange(index+1)
+        else:#In case its the last cell, fill the combobox
+            self.fill_class_combobox()
+
+        
     def next_cell(self):
         index = int(self.spinBox_index.value())
         if index<len(self.rtdc_ds["events"]["pos_x"]):
             self.onIndexChange(index+1)
+        else:#In case its the last cell, fill the combobox
+            self.fill_class_combobox()
 
     def previous_cell(self):       
         index = int(self.spinBox_index.value())
         if index<len(self.rtdc_ds["events"]["pos_x"]):
             self.onIndexChange(index-1)
-
-    def next_channel(self):
-        "Shift the slider horizontalSlider_channel to the next location"
         
-        #Only continue, if a dataset was already loaded:
-        if self.comboBox_selectFile.count()<1:
-            return
-        
-        #get current location of slider
-        slider_current = int(self.horizontalSlider_channel.value())
-        #get the maximum position
-        slider_max = self.horizontalSlider_channel.maximum()
-        
-        if slider_current == slider_max:
-            self.horizontalSlider_channel.setValue(0)
-        else:
-            self.horizontalSlider_channel.setValue(slider_current+1)            
-        
-        
-    def save_true_events(self):
-        #read from table, which events are true
+   
+    def save_events(self):
+        #Which class should be saved?
+        class_save = self.comboBox_Class.currentText()
+        #read from table, which events belong to that class
         rows = self.tableWidget_decisions.rowCount()
         decisions = []
         for row in range(rows):
             decisions.append(str(self.tableWidget_decisions.item(row, 0).text()))
-        decisions = [dec=="True" for dec in decisions]
+        decisions = [dec==class_save for dec in decisions]
 
         ind = np.where(np.array(decisions)==True)[0]        
         #what is the filename of the initial file?
@@ -1236,7 +881,7 @@ class Ui_MainWindow(object):
         rtdc_path = fname
         fname = fname.split(".rtdc")[0]
         #what is the user defined ending?
-        ending = str(self.lineEdit_TrueFname.text())
+        ending = str(self.lineEdit_Savename.text())
         fname = fname+"_"+ending
         
         #write information about these events to excel file
@@ -1244,37 +889,54 @@ class Ui_MainWindow(object):
         
         #write_rtdc expects lists of experiments. Here we will only have a single exp. 
         write_rtdc(fname,rtdc_path,ind,np.array(decisions))
-        print("Saved true events")
+        print("Saved events")
 
 
-    def save_false_events(self):
-        #read from table, which events are true
+    def fill_class_combobox(self):
+        #get the content of tableWidget_decisions
         rows = self.tableWidget_decisions.rowCount()
         decisions = []
         for row in range(rows):
-            decisions.append(str(self.tableWidget_decisions.item(row, 0).text()))
-        decisions = [dec=="True" for dec in decisions]
+            decisions.append(int(self.tableWidget_decisions.item(row, 0).text()))
+        decisions = set(decisions)
+        decisions = [str(d) for d in decisions]
+        #First delete all content of the combobox
+        self.comboBox_Class.clear()
+        #Populate comboBox_Class
+        self.comboBox_Class.addItems(decisions)
+        self.lineEdit_Savename.setEnabled(True)
+        self.pushButton_Save.setEnabled(True)
 
-        ind = np.where(np.array(decisions)==False)[0]        
-        #what is the filename of the initial file?
-        fname = str(self.comboBox_selectFile.currentText())
-        rtdc_path = fname
-        fname = fname.split(".rtdc")[0]
-        #what is the user defined ending?
-        ending = str(self.lineEdit_FalseFname.text())
-        fname = fname+"_"+ending
-        #write_rtdc expects lists of experiments. Here we will only have a single exp. 
-        write_rtdc(fname,rtdc_path,ind,np.array(decisions))
-        print("Saved false events")
+    def init_layercontrols(self,keys_image):
+        self.popup_layercontrols = MyPopup()
+        self.popup_layercontrols_ui = frontend.Ui_LayerControl()
+        self.popup_layercontrols_ui.setupUi(self.popup_layercontrols,keys_image) #open a popup
+
+    def show_layercontrols(self):
+        self.layercontrols_show_nr += 1
+        #self.popup_layercontrols_ui.pushButton_close.clicked.connect(self.visualization_settings)
+        if self.layercontrols_show_nr==1:
+            for iterator in range(len(self.popup_layercontrols_ui.spinBox_minChX)):
+                slider = self.popup_layercontrols_ui.horizontalSlider_chX[iterator]
+                slider.startValueChanged.connect(lambda _, b=None: self.put_image(ind=b))
+                slider.endValueChanged.connect(lambda _, b=None: self.put_image(ind=b))
+                checkBox = self.popup_layercontrols_ui.checkBox_show_chX[iterator]
+                checkBox.stateChanged.connect(lambda _, b=None: self.put_image(ind=b))
+                comboBox = self.popup_layercontrols_ui.comboBox_cmap_chX[iterator]
+                comboBox.currentIndexChanged.connect(lambda _, b=None: self.put_image(ind=b))
+                checkBox = self.popup_layercontrols_ui.checkBox_auto_chX[iterator]
+                checkBox.stateChanged.connect(lambda _, b=None: self.put_image(ind=b))
+
+        self.popup_layercontrols.show()
 
 
 if __name__ == "__main__":
     import sys
     app = QtWidgets.QApplication(sys.argv)
     app.setWindowIcon(QtGui.QIcon(os.path.join(dir_root,"art","icon_main"+icon_suff)))
-    MainWindow = QtWidgets.QMainWindow()
-    ui = Ui_MainWindow()
-    ui.setupUi(MainWindow)
-    MainWindow.show()
+    #MainWindow = QtWidgets.QMainWindow()
+    ui = MainWindow()
+    #ui.setupUi(MainWindow)
+    ui.show()
     sys.exit(app.exec_())
 
