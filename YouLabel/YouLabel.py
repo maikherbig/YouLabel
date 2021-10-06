@@ -27,7 +27,7 @@ except AttributeError:
     def _translate(context, text, disambig):
         return QtWidgets.QApplication.translate(context, text, disambig)
 
-VERSION = "0.2.2" #Python 3.7.10 Version
+VERSION = "0.2.2_dev1" #Python 3.7.10 Version
 print("YouLabel Version: "+VERSION)
 
 if sys.platform=="darwin":
@@ -747,9 +747,10 @@ class MainWindow(QtWidgets.QMainWindow):
         #find keys of image_channels
         keys_image = []
         for key in keys:
-            shape = rtdc_ds["events"][key].shape
-            if len(shape)==3: #images have special shape (2D arrays)
-                keys_image.append(key)
+            if type(rtdc_ds["events"][key])==h5py._hl.dataset.Dataset:
+                shape = rtdc_ds["events"][key].shape
+                if len(shape)==3: #images have special shape (2D arrays)
+                    keys_image.append(key)
         #Sort keys_image: "image" first; "mask" last 
         keys_image.insert(0, keys_image.pop(keys_image.index("image")))
         keys_image.insert(len(keys_image), keys_image.pop(keys_image.index("mask")))
@@ -761,7 +762,7 @@ class MainWindow(QtWidgets.QMainWindow):
         #Set the slider such that every channel can be selected
         #self.horizontalSlider_channel.setRange(0,channels+1) #add one more dimension for a "blending"/superposition channel
         #Define variable on self that carries all image information
-        if channels==0:
+        if channels==0: 
             self.Images = np.expand_dims(rtdc_ds["events"]["image"][:],-1)
         elif channels>0:
             self.Images = np.stack( [rtdc_ds["events"][key][:] for key in keys_image] ,axis=-1)            
