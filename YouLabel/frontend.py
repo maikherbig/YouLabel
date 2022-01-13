@@ -34,7 +34,8 @@ if sys.platform=="darwin":
     icon_suff = ".icns"
 else:
     icon_suff = ".ico"
-dir_root = os.getcwd()
+#dir_root = os.getcwd()
+dir_root = os.path.dirname(__file__)
 
 def MyExceptionHook(etype, value, trace):
     """
