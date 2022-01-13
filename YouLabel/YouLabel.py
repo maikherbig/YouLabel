@@ -27,7 +27,7 @@ except AttributeError:
     def _translate(context, text, disambig):
         return QtWidgets.QApplication.translate(context, text, disambig)
 
-VERSION = "0.2.2_dev1" #Python 3.7.10 Version
+VERSION = "0.2.4" #Python 3.7.10 Version
 print("YouLabel Version: "+VERSION)
 
 if sys.platform=="darwin":
@@ -35,8 +35,7 @@ if sys.platform=="darwin":
 else:
     icon_suff = ".ico"
 
-dir_root = os.getcwd()
-
+dir_root = os.path.dirname(__file__)
 
 def store_trace(h5group, data, compression):
     firstkey = sorted(list(data.keys()))[0]
@@ -103,7 +102,12 @@ def write_rtdc(fname,rtdc_path,indices,decisions):
     h5_orig = h5py.File(rtdc_path, 'r')
 
     #load each feature contained in the .rtdc file, filter it, and append
-    keys = ["label"] + list(h5_orig["events"].keys())
+    
+    #Add thekey label (if it does not already exist)
+    if "label" not in h5_orig["events"].keys():
+        keys = ["label"] + list(h5_orig["events"].keys())
+    else:
+        keys = list(h5_orig["events"].keys())
 
     #Find pixel size of original file:
     pixel_size = h5_orig.attrs["imaging:pixel size"]
@@ -626,7 +630,6 @@ class MainWindow(QtWidgets.QMainWindow):
                 ind_active_g.append(ch)
             if layer_cmap[ch]=="Blue" and layer_active[ch]==True:
                 ind_active_b.append(ch)
-        
         if len(ind_active_r)>0:
             img_ch = img[:,:,np.array(ind_active_r)]
             layer_range_ch = np.array(layer_range)[np.array(ind_active_r)] #Range of all red channels 
@@ -665,7 +668,6 @@ class MainWindow(QtWidgets.QMainWindow):
         
         #Assemble image by stacking all layers
         img = np.stack([img_r,img_g,img_b],axis=-1)
-
         # channel_targ = 0#int(self.horizontalSlider_channel.value())
         color_mode = str(self.comboBox_GrayOrRGB.currentText())
         
@@ -673,7 +675,13 @@ class MainWindow(QtWidgets.QMainWindow):
             #if Color_Mode is grayscale, convert RGB to grayscale
             #simply by taking the mean across all channels
             img = np.mean(img,axis=-1).astype(np.uint8)
+            
+            #Normalize the image back to match range 0-255
+            mini,maxi = np.min(img),np.max(img)/255
+            img = (img-mini)/maxi
 
+        
+        
         #Background removal:
         if str(self.comboBox_BgRemove.currentText())=="":
             img = img#no removal
@@ -685,12 +693,13 @@ class MainWindow(QtWidgets.QMainWindow):
         img_zoom =  cv2.resize(img, dsize=None,fx=factor, fy=factor, interpolation=cv2.INTER_LINEAR)
 
         img_zoom = np.ascontiguousarray(img_zoom)
-        
         if color_mode=="Grayscale":
-            self.label_showFullImage.setImage(img_zoom.T,autoRange=False)
+            self.label_showFullImage.setImage(img_zoom.T,autoRange=False)#,autoLevels=False)
+            self.label_showFullImage.setLevels(0,255)
         elif color_mode=="RGB":
-            self.label_showFullImage.setImage(np.swapaxes(img_zoom,0,1),autoRange=False)
-            
+            self.label_showFullImage.setImage(np.swapaxes(img_zoom,0,1),autoRange=False)#,autoLevels=False)
+            self.label_showFullImage.setLevels(0,255)
+
         self.label_showFullImage.ui.histogram.hide()
         self.label_showFullImage.ui.roiBtn.hide()
         self.label_showFullImage.ui.menuBtn.hide()
@@ -710,14 +719,16 @@ class MainWindow(QtWidgets.QMainWindow):
         if np.isinf(factor):
             factor = 2.5
         img_crop =  cv2.resize(img_crop, dsize=None,fx=factor, fy=factor, interpolation=cv2.INTER_LINEAR)
-
         img_crop = np.ascontiguousarray(img_crop)
-
         if color_mode=="Grayscale":
-            self.label_showCroppedImage.setImage(img_crop.T,autoRange=False)
+            self.label_showCroppedImage.setImage(img_crop.T,autoRange=False)#,autoLevels=False)
+            self.label_showCroppedImage.setLevels(0,255)
         elif color_mode=="RGB":
-            self.label_showCroppedImage.setImage(np.swapaxes(img_crop,0,1),autoRange=False)
+            img_show = np.swapaxes(img_crop,0,1)
+            self.label_showCroppedImage.setImage(img_show,autoRange=False)#,autoLevels=False)
+            self.label_showCroppedImage.setLevels(0,255)
             
+            #self.label_showCroppedImage.setLevels(min=None,max=None,rgba=[(0,255),(0,255),(0,255),(0,100)])
         self.label_showCroppedImage.ui.histogram.hide()
         self.label_showCroppedImage.ui.roiBtn.hide()
         self.label_showCroppedImage.ui.menuBtn.hide()
@@ -876,7 +887,7 @@ class MainWindow(QtWidgets.QMainWindow):
             decisions.append(str(self.tableWidget_decisions.item(row, 0).text()))
         decisions = [dec==class_save for dec in decisions]
 
-        ind = np.where(np.array(decisions)==True)[0]        
+        ind = np.where(np.array(decisions)==True)[0]       
         #what is the filename of the initial file?
         fname = str(self.comboBox_selectFile.currentText())
         rtdc_path = fname
