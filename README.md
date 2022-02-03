@@ -6,7 +6,8 @@ Software with GUI to view and label images of .rtdc datasets. Multiclass labelli
 Colored rectangles in the image indicate the workflow
 1. (Red rectangle) select dataset that should be worked on. After selection the file is loaded and the images of the dataset are displayed.
 2. (Orange rectangle) images of the loaded dataset are displayed. In RT-FDC datasets, the midpoint of each tracked object is stored. Based on this midpoint, the full image (left) is cropped (right) to show the tracked object in the center. To display the next or the previous image, the right and left arrow key can be used.    
-3. (Green rectangle) list shows the labelling decisions. Change the label of the shown cell by pressing the key 0-9.  By default, at the beginning, all events are labelled “True” (class 0).  
+3. deprecated
+4. (Green rectangle) list shows the labelling decisions. Change the label of the shown cell by pressing the key 0-9.  By default, at the beginning, all events are labelled “True” (class 0).  
  
 # Installation
 YouLabel comes as a standalone executable contained in a zip file. You basically just need to download the .zip and unzip. The following 5 steps explain how this is done:    
