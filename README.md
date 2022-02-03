@@ -16,3 +16,7 @@ YouLabel comes as a standalone executable contained in a zip file. You basically
 * Unzip it  
 * Go into the unzipped folder and scroll down until you find an executable (full name is for example "YouLabel_0.1.0.exe")  
 * DoubleClick this .exe to run it (no further installation is required)  
+
+# Citing YouLabel  
+If you use YouLabel for a scientific publication, citation of the following paper would be appreciated:  
+[M. Herbig et al., “Label-free imaging flow cytometry for analysis and sorting of enzymatically dissociated tissues,” Scientific Reports, Jan. 2022.](https://www.nature.com/articles/s41598-022-05007-2)  
