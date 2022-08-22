@@ -10,7 +10,7 @@ import numpy as np
 rand_state = np.random.RandomState(13) #to get the same random number on diff. PCs 
 import traceback
 import cv2
-import h5py,shutil,time
+import h5py,shutil,time,hdf5plugin
 import frontend
 
 try:
@@ -27,7 +27,7 @@ except AttributeError:
     def _translate(context, text, disambig):
         return QtWidgets.QApplication.translate(context, text, disambig)
 
-VERSION = "0.2.4" #Python 3.7.10 Version
+VERSION = "0.2.5" #Python 3.7.10 Version
 print("YouLabel Version: "+VERSION)
 
 if sys.platform=="darwin":
