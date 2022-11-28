@@ -27,8 +27,8 @@ except AttributeError:
     def _translate(context, text, disambig):
         return QtWidgets.QApplication.translate(context, text, disambig)
 
-VERSION = "0.2.5" #Python 3.7.10 Version
-print("YouLabel Version: "+VERSION)
+__version__ = "0.2.6" #Python 3.7.10 Version
+print("YouLabel Version: "+__version__)
 
 if sys.platform=="darwin":
     icon_suff = ".icns"
@@ -471,7 +471,7 @@ class MainWindow(QtWidgets.QMainWindow):
         frontend.setup_main_ui(self)
     
     def retranslateUi(self):
-        frontend.retranslate_main_ui(self,VERSION)
+        frontend.retranslate_main_ui(self,__version__)
 
     def dataDropped(self, l):
         #If there is data stored on ram tell user that RAM needs to be refreshed!
@@ -764,7 +764,8 @@ class MainWindow(QtWidgets.QMainWindow):
                     keys_image.append(key)
         #Sort keys_image: "image" first; "mask" last 
         keys_image.insert(0, keys_image.pop(keys_image.index("image")))
-        keys_image.insert(len(keys_image), keys_image.pop(keys_image.index("mask")))
+        if 'mask' in keys_image:
+            keys_image.insert(len(keys_image), keys_image.pop(keys_image.index("mask")))
 
         #initialize a layer-options-popup-window
         self.init_layercontrols(keys_image)
