@@ -34,28 +34,32 @@ if sys.platform=="darwin":
     icon_suff = ".icns"
 else:
     icon_suff = ".ico"
-#dir_root = os.getcwd()
+
 dir_root = os.path.dirname(__file__)
 
-def MyExceptionHook(etype, value, trace):
-    """
-    Handler for all unhandled exceptions.
- 
-    :param `etype`: the exception type (`SyntaxError`, `ZeroDivisionError`, etc...);
-    :type `etype`: `Exception`
-    :param string `value`: the exception error message;
-    :param string `trace`: the traceback header, if any (otherwise, it prints the
-     standard Python header: ``Traceback (most recent call last)``.
-    """
-    tmp = traceback.format_exception(etype, value, trace)
-    exception = "".join(tmp)
+
+def myexcepthook(etype, value, trace):
+    error = traceback.format_exception(etype, value, trace)
+    error = "".join(error)
+    message(error,msg_type="Error")
+    return
+
+def message(msg_text,msg_type="Error"):
+    #There was an error!
     msg = QtWidgets.QMessageBox()
-    msg.setIcon(QtWidgets.QMessageBox.Information)       
-    msg.setText(exception)
-    msg.setWindowTitle("Error")
+    if msg_type=="Error":
+        msg.setIcon(QtWidgets.QMessageBox.Critical)       
+    elif msg_type=="Information":
+        msg.setIcon(QtWidgets.QMessageBox.Information)       
+    elif msg_type=="Question":
+        msg.setIcon(QtWidgets.QMessageBox.Question)       
+    elif msg_type=="Warning":
+        msg.setIcon(QtWidgets.QMessageBox.Warning)       
+    msg.setText(str(msg_text))
+    msg.setWindowTitle(msg_type)
     msg.setStandardButtons(QtWidgets.QMessageBox.Ok)
     msg.exec_()
-    return
+
 
 #Special signal for combobox: when clicked basically (when dropped down)
 class QComboBox2(QtWidgets.QComboBox):
@@ -569,7 +573,7 @@ class QRangeSlider(QtWidgets.QWidget, Ui_Form):
 def setup_main_ui(self):
     self.setObjectName("MainWindow")
     self.resize(696, 615)
-    sys.excepthook = MyExceptionHook
+    sys.excepthook = myexcepthook
 
     self.centralwidget = QtWidgets.QWidget(self)
     self.centralwidget.setObjectName("centralwidget")
