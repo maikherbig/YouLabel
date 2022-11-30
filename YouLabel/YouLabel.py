@@ -892,7 +892,8 @@ class MainWindow(QtWidgets.QMainWindow):
         #what is the filename of the initial file?
         fname = str(self.comboBox_selectFile.currentText())
         rtdc_path = fname
-        fname = fname.split(".rtdc")[0]
+        filename, file_extension = os.path.splitext(fname)
+        fname = fname.split(file_extension)[0]
         #what is the user defined ending?
         ending = str(self.lineEdit_Savename.text())
         fname = fname+"_"+ending
