@@ -489,12 +489,7 @@ class MainWindow(QtWidgets.QMainWindow):
             rtdc_path = filenames[i]
             failed,rtdc_ds = load_rtdc(rtdc_path)
             if failed:
-                msg = QtWidgets.QMessageBox()
-                msg.setIcon(QtWidgets.QMessageBox.Critical)       
-                msg.setText(str(rtdc_ds))
-                msg.setWindowTitle("Error occurred during loading file")
-                msg.setStandardButtons(QtWidgets.QMessageBox.Ok)
-                msg.exec_()
+                frontend.message("Error occurred during loading file","Error")
                 return
                 
             features = list(rtdc_ds["events"].keys())
@@ -507,7 +502,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 missing = []
                 for feat in ["image","pos_x","pos_y"]:
                     if feat not in features:
-                        missing.append(feat)    
+                        missing.append(feat)
                 msg = QtWidgets.QMessageBox()
                 msg.setIcon(QtWidgets.QMessageBox.Information)       
                 msg.setText("Essential feature(s) are missing in data-set")
