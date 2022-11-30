@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 """
-YouLabel: Software with GUI to view and label images of .rtdc datasets
+YouLabel: Software with GUI to view and label images of hdf5 datasets
 """
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtWidgets, QtGui
