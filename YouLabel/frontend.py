@@ -726,6 +726,13 @@ def setup_main_ui(self):
     self.label_paddingMode.setObjectName("label_paddingMode")
     self.horizontalLayout_nrEpochs.addWidget(self.label_paddingMode)
     self.gridLayout_49.addLayout(self.horizontalLayout_nrEpochs, 1, 0, 1, 1)
+    self.doubleSpinBox_brightness = QtWidgets.QDoubleSpinBox(self.groupBox_imgProc)
+    self.doubleSpinBox_brightness.setMaximum(999.0)
+    self.doubleSpinBox_brightness.setProperty("value", 1.0)
+    self.doubleSpinBox_brightness.setSingleStep(0.1)
+    self.doubleSpinBox_brightness.setObjectName("doubleSpinBox_brightness")
+    self.gridLayout_49.addWidget(self.doubleSpinBox_brightness, 2, 4, 1, 1)
+
     self.comboBox_BgRemove = QtWidgets.QComboBox(self.groupBox_imgProc)
     self.comboBox_BgRemove.setMinimumSize(QtCore.QSize(200, 0))
     self.comboBox_BgRemove.addItem("")
@@ -753,11 +760,26 @@ def setup_main_ui(self):
     self.comboBox_paddingMode.addItem("")
     self.comboBox_paddingMode.addItem("")
     self.gridLayout_49.addWidget(self.comboBox_paddingMode, 1, 1, 1, 1)
+    
+    
+
+    self.horizontalLayout_brightness = QtWidgets.QHBoxLayout()
+    self.horizontalLayout_brightness.setObjectName("horizontalLayout_brightness")
+    self.label_brightnessIcon = QtWidgets.QLabel(self.groupBox_imgProc)
+    self.label_brightnessIcon.setText("")
+    self.label_brightnessIcon.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
+    self.label_brightnessIcon.setObjectName("label_brightnessIcon")
+    self.horizontalLayout_brightness.addWidget(self.label_brightnessIcon)
+    self.label_brightness = QtWidgets.QLabel(self.groupBox_imgProc)
+    self.label_brightness.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
+    self.label_brightness.setObjectName("label_brightness")
+    self.horizontalLayout_brightness.addWidget(self.label_brightness)
+    self.gridLayout_49.addLayout(self.horizontalLayout_brightness, 2, 3, 1, 1)
+
     self.horizontalLayout_normalization = QtWidgets.QHBoxLayout()
     self.horizontalLayout_normalization.setObjectName("horizontalLayout_normalization")
     self.label_NormalizationIcon = QtWidgets.QLabel(self.groupBox_imgProc)
     self.label_NormalizationIcon.setText("")
-    self.label_NormalizationIcon.setPixmap(QtGui.QPixmap("C:/BIOTEC-WORK/Own ideas/56 AIDeveloper/013_AIDeveloper_0.0.8_dev1/art/Icon theme 1/normalization.png"))
     self.label_NormalizationIcon.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
     self.label_NormalizationIcon.setObjectName("label_NormalizationIcon")
     self.horizontalLayout_normalization.addWidget(self.label_NormalizationIcon)
@@ -840,6 +862,7 @@ def setup_main_ui(self):
     self.horizontalSlider_index.valueChanged.connect(self.onIndexChange)
     self.spinBox_index.valueChanged.connect(self.onIndexChange)
     self.spinBox_cropsize.valueChanged.connect(lambda ind: self.put_image(self.spinBox_index.value()))
+    self.doubleSpinBox_brightness.valueChanged.connect(lambda ind: self.put_image(self.spinBox_index.value()))
     self.comboBox_paddingMode.currentIndexChanged.connect(lambda ind: self.put_image(self.spinBox_index.value()))
 
     self.comboBox_BgRemove.currentIndexChanged.connect(lambda ind: self.put_image(self.spinBox_index.value()))
@@ -876,6 +899,10 @@ def setup_main_ui(self):
     
     self.label_paddingMode.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
 
+    self.label_brightnessIcon.setPixmap(QtGui.QPixmap(os.path.join(dir_root,"art","brightness_mult.png")))
+
+    self.pushButton_Save.setIcon(QtGui.QIcon(os.path.join(dir_root,"art","save.png")))
+
 
 def retranslate_main_ui(self,VERSION):
     _translate = QtCore.QCoreApplication.translate
@@ -911,7 +938,8 @@ def retranslate_main_ui(self,VERSION):
     self.comboBox_paddingMode.setItemText(3, _translate("MainWindow", "symmetric"))
     self.comboBox_paddingMode.setItemText(4, _translate("MainWindow", "wrap"))
     self.comboBox_paddingMode.setItemText(5, _translate("MainWindow", "alternate"))
-
+    self.label_brightness.setText(_translate("MainWindow", "Brightness"))
+    
     self.comboBox_GrayOrRGB.setItemText(0, _translate("MainWindow", "Grayscale"))
     self.comboBox_GrayOrRGB.setItemText(1, _translate("MainWindow", "RGB"))
 
