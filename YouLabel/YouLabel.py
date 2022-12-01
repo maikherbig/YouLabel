@@ -27,7 +27,7 @@ except AttributeError:
     def _translate(context, text, disambig):
         return QtWidgets.QApplication.translate(context, text, disambig)
 
-__version__ = "0.2.6" #Python 3.7.10 Version
+__version__ = "0.2.7" #Python 3.7.10 Version
 print("YouLabel Version: "+__version__)
 
 if sys.platform=="darwin":
