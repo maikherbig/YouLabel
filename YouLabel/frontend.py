@@ -586,7 +586,7 @@ def setup_main_ui(self):
     self.gridLayout_2 = QtWidgets.QGridLayout(self.LoadFiles)
     self.gridLayout_2.setObjectName("gridLayout_2")
     
-    self.tableWidget_loadFiles = MyTable(0,9,self.LoadFiles)
+    self.tableWidget_loadFiles = MyTable(0,3,self.LoadFiles)
     
     self.tableWidget_loadFiles.setObjectName("tableWidget_loadFiles")
     # self.tableWidget_loadFiles.setColumnCount(0)
@@ -608,11 +608,6 @@ def setup_main_ui(self):
     self.comboBox_selectFile = QtWidgets.QComboBox(self.widget)
     self.comboBox_selectFile.setObjectName("comboBox_selectFile")
     self.horizontalLayout_top.addWidget(self.comboBox_selectFile)
-    self.pushButton_start = QtWidgets.QPushButton(self.widget)
-    self.pushButton_start.setMinimumSize(QtCore.QSize(75, 28))
-    self.pushButton_start.setMaximumSize(QtCore.QSize(75, 28))
-    self.pushButton_start.setObjectName("pushButton_start")
-    self.horizontalLayout_top.addWidget(self.pushButton_start)
     self.groupBox_view = QtWidgets.QGroupBox(self.splitter_4)
     self.groupBox_view.setObjectName("groupBox_view")
     self.gridLayout_6 = QtWidgets.QGridLayout(self.groupBox_view)
@@ -831,17 +826,16 @@ def setup_main_ui(self):
     ##########################Manual changes###############################
     #######################################################################
     self.tableWidget_loadFiles.setObjectName(_fromUtf8("tableWidget_loadFiles"))
-    header_labels = ["File", "Index" ,"T", "V", "Show","Features","Cells total","Cells/Epoch","PIX"]
+    header_labels = ["File","Cells total","PIX"]
     self.tableWidget_loadFiles.setHorizontalHeaderLabels(header_labels) 
     header = self.tableWidget_loadFiles.horizontalHeader()
-    for i in [1,2,3,4,5,6,7,8]:#range(len(header_labels)):
+    for i in [1,2]:#range(len(header_labels)):
         header.setResizeMode(i, QtWidgets.QHeaderView.ResizeToContents)        
     self.tableWidget_loadFiles.setAcceptDrops(True)
     self.tableWidget_loadFiles.setDragEnabled(True)
     self.tableWidget_loadFiles.dropped.connect(self.dataDropped)
     self.tableWidget_loadFiles.resizeRowsToContents()
 
-    self.pushButton_start.clicked.connect(self.start_analysis)
     self.shortcut_true = QtGui.QShortcut(QtGui.QKeySequence("T"), self.tabWidget)
     self.shortcut_true.activated.connect(self.true_cell)
     self.shortcut_false = QtGui.QShortcut(QtGui.QKeySequence("F"), self.tabWidget)
@@ -908,7 +902,6 @@ def retranslate_main_ui(self,VERSION):
     _translate = QtCore.QCoreApplication.translate
     self.setWindowTitle(_translate("MainWindow", "YouLabel_v"+VERSION))
     self.tabWidget.setTabText(self.tabWidget.indexOf(self.LoadFiles), _translate("MainWindow", "Load Files"))
-    self.pushButton_start.setText(_translate("MainWindow", "Start"))
     self.label_Class2.setText(_translate("MainWindow", "Class"))
     self.horizontalSlider_index.setToolTip(_translate("MainWindow", "Shortcut: Left/Right arrow"))
     self.groupBox_view.setTitle(_translate("MainWindow", "View"))
