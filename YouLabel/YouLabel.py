@@ -456,7 +456,6 @@ def clip_contrast(img,low,high,auto=False):
     img[:,:] = (img[:,:]-mini)/maxi
     return img
 
-
 class MyPopup(QtWidgets.QWidget):
     def __init__(self):
         QtWidgets.QWidget.__init__(self)
@@ -672,8 +671,10 @@ class MainWindow(QtWidgets.QMainWindow):
             img = np.mean(img,axis=-1).astype(np.uint8)
             
             #Normalize the image back to match range 0-255
-            mini,maxi = np.min(img),np.max(img)/255
-            img = (img-mini)/maxi
+            mult = float(self.doubleSpinBox_brightness.value())
+            img = mult*img
+            # mini,maxi = np.min(img),np.max(img)/255
+            # img = (img-mini)/maxi
 
         
         
@@ -683,11 +684,7 @@ class MainWindow(QtWidgets.QMainWindow):
         elif str(self.comboBox_BgRemove.currentText())=="vstripes_removal":
             img = vstripes_removal(img)
 
-        #zoom image such that longest side is 200
-        factor = np.round(float(200/np.max(img.shape)),0)
-        img_zoom =  cv2.resize(img, dsize=None,fx=factor, fy=factor, interpolation=cv2.INTER_LINEAR)
-
-        img_zoom = np.ascontiguousarray(img_zoom)
+        img_zoom = np.ascontiguousarray(img)
         if color_mode=="Grayscale":
             self.label_showFullImage.setImage(img_zoom.T,autoRange=False)#,autoLevels=False)
             self.label_showFullImage.setLevels(0,255)
@@ -709,11 +706,7 @@ class MainWindow(QtWidgets.QMainWindow):
         padding_mode = pad_arguments_np2cv(padding_mode)
         img_crop = image_crop_pad_cv2([img],[pos_x],[pos_y],PIX,cropsize,cropsize,padding_mode=padding_mode)
         img_crop = img_crop[0]
-        #zoom image such that the height gets the same as for non-cropped img
-        factor = float(float(height)/np.max(img_crop.shape[0]))
-        if np.isinf(factor):
-            factor = 2.5
-        img_crop =  cv2.resize(img_crop, dsize=None,fx=factor, fy=factor, interpolation=cv2.INTER_LINEAR)
+
         img_crop = np.ascontiguousarray(img_crop)
         if color_mode=="Grayscale":
             self.label_showCroppedImage.setImage(img_crop.T,autoRange=False)#,autoLevels=False)
