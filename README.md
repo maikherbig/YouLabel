@@ -1,5 +1,5 @@
 # YouLabel
-Software with GUI to view and label images of .rtdc datasets. Multiclass labelling (up to 10 classes) is supported.
+Software with GUI to view and label images of hdf5 files. Multiclass labelling (up to 10 classes) is supported.
 
 # Screenshot
 ![alt text](art/ScreenShot_v01.png "YouLabel Screenshot")  
