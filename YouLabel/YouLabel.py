@@ -526,54 +526,16 @@ class MainWindow(QtWidgets.QMainWindow):
             item.setTextAlignment(QtCore.Qt.AlignCenter) # change the alignment
             #item.setTextAlignment(QtCore.Qt.AlignLeading | QtCore.Qt.AnchorRight) # change the alignment
             self.tableWidget_loadFiles.setItem(rowPosition , columnPosition, item ) #
+                        
 
             columnPosition = 1
-            spinb = QtWidgets.QSpinBox(self.tableWidget_loadFiles)
-            self.tableWidget_loadFiles.setCellWidget(rowPosition, columnPosition, spinb)            
-
-            for columnPosition in range(2,4):
-                #for each item, also create 2 checkboxes (train/valid)
-                item = QtWidgets.QTableWidgetItem()#("item {0} {1}".format(rowNumber, columnNumber))
-                item.setFlags( QtCore.Qt.ItemIsUserCheckable | QtCore.Qt.ItemIsEnabled  )
-                item.setCheckState(QtCore.Qt.Unchecked)
-                self.tableWidget_loadFiles.setItem(rowPosition, columnPosition, item)
-            
-            columnPosition = 4
-            #Place a button which allows to show a plot (scatter, histo...lets see)
-            btn = QtWidgets.QPushButton(self.tableWidget_loadFiles)
-            btn.setMinimumSize(QtCore.QSize(50, 30))
-            btn.setMaximumSize(QtCore.QSize(50, 30))
-            #btn.clicked.connect(self.button_hist)
-            btn.setText('Plot')
-            self.tableWidget_loadFiles.setCellWidget(rowPosition, columnPosition, btn)            
-            self.tableWidget_loadFiles.resizeRowsToContents()
-
-            columnPosition = 5
-            #Place a combobox with the available features
-            cb = QtWidgets.QComboBox(self.tableWidget_loadFiles)
-            cb.addItems(fileinfo[rowNumber]["features"])
-            cb.setMinimumSize(QtCore.QSize(70, 30))
-            cb.setMaximumSize(QtCore.QSize(70, 30))
-            
-            width=cb.fontMetrics().boundingRect(max(fileinfo[rowNumber]["features"], key=len)).width()
-            cb.view().setFixedWidth(width+30)             
-
-            self.tableWidget_loadFiles.setCellWidget(rowPosition, columnPosition, cb)            
-
-            columnPosition = 6
             #Place a combobox with the available features
             item = QtWidgets.QTableWidgetItem()
             item.setData(QtCore.Qt.DisplayRole, fileinfo[rowNumber]["nr_images"])
             item.setFlags(item.flags() &~QtCore.Qt.ItemIsEnabled &~ QtCore.Qt.ItemIsSelectable )
             self.tableWidget_loadFiles.setItem(rowPosition, columnPosition, item)
 
-            columnPosition = 7
-            #Field to user-define nr. of cells/epoch
-            item = QtWidgets.QTableWidgetItem()
-            item.setData(QtCore.Qt.EditRole,100)
-            self.tableWidget_loadFiles.setItem(rowPosition, columnPosition, item)
-
-            columnPosition = 8
+            columnPosition = 2
             #Pixel size
             item = QtWidgets.QTableWidgetItem()
             pix = fileinfo[rowNumber]["pix"]
@@ -779,15 +741,11 @@ class MainWindow(QtWidgets.QMainWindow):
         header = [str(i) for i in range(nr_images)]
         self.tableWidget_decisions.setVerticalHeaderLabels(header) 
 
-        
         for row in range(nr_images):
             item = QtWidgets.QTableWidgetItem()
             item.setData(QtCore.Qt.DisplayRole, "0")
             item.setFlags(item.flags() &~QtCore.Qt.ItemIsEnabled &~ QtCore.Qt.ItemIsSelectable )
             self.tableWidget_decisions.setItem(row, 0, item)
-
-        #self.radioButton_true.setChecked(True)
-
 
         
     def onIndexChange(self,index):
